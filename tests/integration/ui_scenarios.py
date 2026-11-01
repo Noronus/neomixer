@@ -2094,6 +2094,11 @@ def _real_keys(*keys, hold=None):
     return subprocess.Popen(command + list(keys))
 
 
+def _answer_dialog(confirm):
+    '''A click on its buttons: where the dialog has them is the same on all, it opens centered at a fixed size.'''
+    _real_keys('--click', '915' if confirm else '1004', '759')
+
+
 def _kde_shortcuts():
     '''What KDE itself has for this app, in its settings file.'''
     import os
@@ -2158,7 +2163,7 @@ def kde_hotkeys_set(d):
     yield 1.5
     d.check(controller.busy, 'the dialog is up')
     _screen(d, 'kde_dialog')
-    _real_keys('alt', 'c')
+    _answer_dialog(False)
     yield 1.5
     d.check(not controller.busy, 'cancelled')
     d.check('mute' not in repository.get_device('vi', '1').hotkeys, 'nothing was set')
@@ -2193,7 +2198,7 @@ def kde_hotkeys_set(d):
     yield 1.5
     d.check(controller.busy, 'the dialog is up')
     _screen(d, 'kde_dialog_all')
-    _real_keys('alt', 'o')
+    _answer_dialog(True)
     yield 1.5
     d.check(not controller.busy, 'confirmed')
     d.check('work now' in window.status.get_label(), window.status.get_label())
@@ -2279,7 +2284,7 @@ def kde_hotkeys_after_reboot(d):
     window.apply_button.emit('clicked')
     yield 1.5
     d.check(controller.busy, 'asks about the new one')
-    _real_keys('alt', 'o')
+    _answer_dialog(True)
     yield 1.5
     kde = _kde_shortcuts()
     d.check('vi-1-mute-CTRL+ALT+n' in kde and 'vi-1-mute-CTRL+ALT+m' not in kde, f'KDE has the new one and not the old: {sorted(kde)}')
@@ -2299,7 +2304,7 @@ def kde_hotkeys_after_reboot(d):
     window.apply_button.emit('clicked')
     yield 1.5
     _screen(d, 'kde_dialog_moved_key')
-    _real_keys('alt', 'o')
+    _answer_dialog(True)
     yield 1.5
     kde = _kde_shortcuts()
     d.check(kde.get('vi-2-mute-CTRL+ALT+m') == 'Ctrl+Alt+M', f'another device gets those keys: {kde}')
@@ -2314,7 +2319,7 @@ def kde_hotkeys_after_reboot(d):
     yield from _set_keys(d, window, ('vi', '2', 'up'), 'ctrl', 'alt', 'i')
     window.apply_button.emit('clicked')
     yield 1.5
-    _real_keys('alt', 'c')
+    _answer_dialog(False)
     yield 1.8
     d.check('up' not in other.hotkeys, 'refused: not set')
     d.check('vi-2-up-CTRL+ALT+i' not in _kde_shortcuts(), 'KDE keeps nothing of it')
@@ -2331,7 +2336,7 @@ def kde_hotkeys_after_reboot(d):
     window.apply_button.emit('clicked')
     yield 1.5
     d.check(controller.busy, 'asks again')
-    _real_keys('alt', 'o')
+    _answer_dialog(True)
     yield 1.5
     d.check(other.hotkeys.get('up') == 'CTRL+ALT+i', 'and then it is set')
 

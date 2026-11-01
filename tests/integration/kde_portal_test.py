@@ -26,7 +26,7 @@ def start_session(root):
     env = dict(
         os.environ, HOME=root, XDG_RUNTIME_DIR=runtime, XDG_CONFIG_HOME=os.path.join(root, 'config'),
         XDG_STATE_HOME=os.path.join(root, 'state'), XDG_DATA_HOME=os.path.join(root, 'data'),
-        XDG_CURRENT_DESKTOP='KDE', XDG_SESSION_TYPE='wayland', KDE_FULL_SESSION='true', KDE_SESSION_VERSION='6',
+        XDG_CURRENT_DESKTOP='KDE', XDG_SESSION_TYPE='wayland',
         WAYLAND_DISPLAY='wl-kde', QT_QPA_PLATFORM='wayland', GDK_BACKEND='wayland', GSK_RENDERER='cairo', GTK_A11Y='none',
         KWIN_WAYLAND_NO_PERMISSION_CHECKS='1', KWIN_SCREENSHOT_NO_PERMISSION_CHECKS='1',
         NEOMIXER_KDE_SESSION=root, PYTHONPATH=f'{lifecycle_test.CODE}:{ROOT}',
@@ -44,7 +44,15 @@ def start_session(root):
         time.sleep(wait)
 
     start('kwin_wayland', '--virtual', '--no-lockscreen', '--no-kactivities', '--socket', 'wl-kde',
-          '--width', '1600', '--height', '1000', wait=4)
+          '--width', '1600', '--height', '1000')
+    for _ in range(60):
+        if os.path.exists(os.path.join(runtime, 'wl-kde')):
+            break
+        time.sleep(0.5)
+    else:
+        with open(os.path.join(root, 'kwin_wayland.log'), encoding='utf-8') as log:
+            sys.exit('KWin did not start:\n' + log.read()[-2000:])
+    time.sleep(3)
     start('pipewire')
     start('wireplumber')
     start('pipewire-pulse', wait=1)
