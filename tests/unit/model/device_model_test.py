@@ -135,3 +135,26 @@ class TestGetSelectedChannels(unittest.TestCase):
             device.get_selected_channels(['playback_FL', 'playback_FR']),
             [(0, 'FL'), (1, 'FR')]
         )
+
+
+def test_hotkeys_stay_when_settings_change():
+    device = DeviceModel(name='one', device_type='sink', device_class='virtual', channels=2, channel_list=['FL', 'FR'],
+                         selected_channels=[True, True], hotkeys={'mute': 'CTRL+m'})
+    device.update_device_settings({'name': 'two', 'nick': 'two', 'description': 'two', 'channels': 1, 'external': False,
+                                   'channel_list': ['MONO'], 'selected_channels': [True]})
+    assert device.hotkeys == {'mute': 'CTRL+m'}
+
+
+def test_hotkeys_are_saved_with_the_device():
+    device = DeviceModel(name='one', device_type='sink', device_class='virtual', channels=2, channel_list=['FL', 'FR'],
+                         selected_channels=[True, True], hotkeys={'mute': 'CTRL+m'})
+    assert DeviceModel(**device.dict()).hotkeys == {'mute': 'CTRL+m'}
+
+
+def test_a_config_from_before_hotkeys_has_none():
+    device = DeviceModel(name='one', device_type='sink', device_class='virtual', channels=2, channel_list=['FL', 'FR'],
+                         selected_channels=[True, True])
+    other = DeviceModel(name='two', device_type='sink', device_class='virtual', channels=2, channel_list=['FL', 'FR'],
+                        selected_channels=[True, True])
+    device.hotkeys['mute'] = 'CTRL+m'
+    assert other.hotkeys == {}

@@ -54,10 +54,15 @@ its window closes: start it again from the menu to get the window back.
 | Edit the EQ | Drag a handle for frequency and gain, scroll for Q, double click to zero the gain |
 | Make a device the system default | **★** on its strip |
 | Keep it the default, whatever other programs do | The lock on its strip |
+| Mute or change the volume with keys, from any program | Settings menu, **Hotkeys…**. Your desktop asks once to confirm new keys |
 | Quit for real | Settings menu, or the tray icon's menu, or `neomixer quit` |
 
 Closing the window keeps NeoMixer running, since new streams only reach their remembered output
 while it runs. Routes and the EQ also keep playing after you quit, until you log out.
+
+Hotkeys go through the desktop's global shortcuts portal, the one way a program gets keys on Wayland:
+KDE and GNOME have it. Holding a volume key keeps going up to 0 dB, past that takes a press each. On a
+desktop without it, bind keys in its settings to `neomixer hotkey <hi|vi|a|b> <id> <mute|up|down>`.
 
 Files: `~/.config/neomixer/config.json` and `~/.local/state/neomixer/neomixer.log`.
 
@@ -86,6 +91,9 @@ python -m venv --system-site-packages .venv
 # The real app against a real, private sound server: real audio is measured through the EQ.
 # Runs in its own PipeWire, WirePlumber, D-Bus and headless KWin, your audio is not touched.
 .venv/bin/python tests/integration/lifecycle_test.py
+
+# Hotkeys against real KDE, with real keys and its real dialog. Starts a portal, so only in a container
+# (packaging/test.sh does this): .venv/bin/python tests/integration/kde_portal_test.py
 
 # The packages, each built in a clean container of its distro, from what is committed
 packaging/build.sh

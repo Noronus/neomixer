@@ -29,6 +29,7 @@ class SettingsMenuBox(Gtk.Box):
     __gsignals__ = {
         "settings_change": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_PYOBJECT,)),
         "help_pressed": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
+        "hotkeys_pressed": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
         "quit_pressed": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
     }
 
@@ -71,6 +72,11 @@ class SettingsMenuBox(Gtk.Box):
         for switch in self.switches:
             switch.connect('notify::active', self._on_switched)
         self.text_size.connect('value-changed', self._on_switched)
+
+        self.hotkeys_button = Gtk.Button(label=_('Hotkeys…'), margin_top=4)
+        self.hotkeys_button.set_tooltip_text(_('Mute and change the volume of any device with keys, from any program'))
+        self.append(self.hotkeys_button)
+        self.hotkeys_button.connect('clicked', lambda _: self.emit('hotkeys_pressed'))
 
         self.help_button = Gtk.Button(label=_('Guide'))
         self.help_button.set_tooltip_text(_('Open the welcome guide'))

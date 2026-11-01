@@ -59,6 +59,11 @@ GUIDE_SECTIONS = [
           'to automatically. This sets the primary in PipeWire itself. The lock next to it keeps '
           'it the default: if another program changes the default device, it switches back.')
     ),
+    (
+        _('Hotkeys'),
+        _('In the settings menu, Hotkeys… sets keys to mute any device or change its volume, from '
+          'any program. Your desktop owns global keys, so it asks you to confirm new ones.')
+    ),
 ]
 
 FOOTER = _('You can reopen this guide any time from the settings menu.')

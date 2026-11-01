@@ -35,6 +35,17 @@ window.neomixer headerbar, window.neomixer-eq headerbar {
 .server-lost { color: @nm_mute; font-weight: 700; }
 .name-taken { color: @nm_mute; font-size: 0.85em; margin-top: 2px; margin-bottom: 4px; }
 
+/* Hotkeys */
+.hotkey-hint { color: @nm_dim; }
+.hotkey-status-problem { color: @nm_mute; }
+.hotkey-status-good { color: @nm_a; }
+.hotkey-device { font-weight: 600; }
+button.hotkey-key { min-width: 112px; padding: 3px 8px; }
+button.hotkey-key.hotkey-capturing {
+    background-image: none; background-color: alpha(@nm_vi, 0.25); border: 1px solid @nm_vi; color: @nm_text;
+}
+.hotkey-column { color: @nm_dim; font-size: 0.85em; font-weight: 700; }
+
 /* Mixer */
 .section { background-color: @nm_panel; border-radius: 10px; padding: 6px; border: 1px solid @nm_line; }
 .section-title {

@@ -31,6 +31,7 @@ class DeviceModel(BaseModel):
     connections: dict[str, dict[str, ConnectionModel]] = {'a': {}, 'b': {}}
     selected_channels: list[bool] | None
     eq: EqModel = Field(default_factory=EqModel)
+    hotkeys: dict[str, str] = Field(default_factory=dict)  # action: keys, see utils.hotkeys
 
     # Transient runtime status (not persisted).
     # init_failed/init_error: hard error (e.g. pw-cli failed to create) - UI shows warning.

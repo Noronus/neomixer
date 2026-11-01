@@ -25,14 +25,16 @@ arch)
     pacman -Syu --noconfirm >/dev/null || exit 1
     pacman -U --noconfirm /packages/neomixer-*.pkg.tar.zst || exit 1
     pacman -Qlq neomixer >/tmp/package-files
-    test_packages=(kwin ffmpeg python-pytest ttf-dejavu desktop-file-utils util-linux)
+    test_packages=(kwin ffmpeg python-pytest ttf-dejavu desktop-file-utils util-linux
+                   xdg-desktop-portal xdg-desktop-portal-kde python-pywayland plasma-wayland-protocols)
     install_test_packages() { pacman -S --noconfirm --needed "${test_packages[@]}"; }
     remove_package() { pacman -Rns --noconfirm neomixer; }
     ;;
 fedora)
     dnf -y install /packages/neomixer-*.rpm || exit 1
     rpm -ql neomixer >/tmp/package-files
-    test_packages=(kwin mutter ffmpeg-free python3-pytest dejavu-sans-fonts desktop-file-utils pulseaudio-utils util-linux dbus-daemon glib2 findutils procps-ng)
+    test_packages=(kwin mutter ffmpeg-free python3-pytest dejavu-sans-fonts desktop-file-utils pulseaudio-utils util-linux dbus-daemon glib2 findutils procps-ng
+                   xdg-desktop-portal xdg-desktop-portal-kde python3-pywayland plasma-wayland-protocols-devel)
     install_test_packages() { dnf -y -q install "${test_packages[@]}"; }
     remove_package() { dnf -y remove neomixer; }
     ;;
@@ -109,6 +111,12 @@ if command -v mutter >/dev/null; then
     mkdir -p /shots/gnome
     cp -r /work/shots-gnome/. /shots/gnome/ 2>/dev/null
 fi
+
+echo "=== hotkeys with real KDE"
+as_tester NEOMIXER_CODE=/usr/lib/neomixer python3 tests/integration/kde_portal_test.py /work/shots-kde
+[ $? -eq 0 ] || failed=1
+mkdir -p /shots/kde
+cp -r /work/shots-kde/. /shots/kde/ 2>/dev/null
 
 echo "=== removing it"
 remove_package >/dev/null || failed=1

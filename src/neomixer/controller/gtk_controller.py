@@ -17,12 +17,13 @@ from neomixer.model.config_model import ConfigModel
 from neomixer.model.device_model import DeviceModel
 
 from neomixer.clients.gtk.text_size import TextScaler
-from neomixer.clients.gtk.widgets.content import Content
+from neomixer.clients.gtk.widgets.content import Content, SECTION_ORDER
 from neomixer.clients.gtk.widgets.device.device_widget import DeviceWidget
 from neomixer.clients.gtk.widgets.app.app_widget import AppWidget
 from neomixer.clients.gtk.widgets.app.app_dropdown import AppDropDown
 from neomixer.clients.gtk.widgets.eq.eq_window import EqWindow
 from neomixer.clients.gtk.widgets.welcome_window import WelcomeWindow
+from neomixer.clients.gtk.widgets.hotkey_window import HotkeyWindow
 from neomixer.settings import APP_ID
 
 # pylint: disable=wrong-import-order,wrong-import-position
@@ -38,6 +39,8 @@ _ = gettext.gettext
 # An app can open many streams, the meter only needs to show that it is playing
 MAX_METERED_STREAMS = 4
 EQ_APPLY_DELAY_MS = 30
+# Holding a key stops here, 0 dB. Past it takes a press each, it should not get loud by accident.
+HOTKEY_HOLD_CEILING = 100
 
 
 class GtkController(SignalModel):
@@ -75,6 +78,12 @@ class GtkController(SignalModel):
             Emitted when a program should be removed from the list.
         app_add(app_type: str, key: str, label: str, icon, binary):
             Emitted when a program should be added to the list.
+        hotkeys_probe():
+            Emitted when it needs to be known if this desktop has global shortcuts.
+        hotkeys_apply(edits: dict):
+            Emitted when hotkeys were changed, {(device_type, device_id, action): keys or None}.
+        hotkeys_configure():
+            Emitted when the desktop's own settings for the hotkeys should open.
         quit():
             Emitted when the user asks to quit.
         pa_hotplug(device_type: str, device_id: str):
@@ -108,6 +117,7 @@ class GtkController(SignalModel):
         self.window = None
         self.content = None
         self.welcome_window = None
+        self.hotkey_window = None
         self.text_scaler = None
         self.status_label = None
         self.vumeter_tasks = {'a': {}, 'b': {}, 'vi': {}, 'hi': {}}
@@ -495,6 +505,7 @@ class GtkController(SignalModel):
             'settings_pressed': self.settings_menu_open,
             'settings_change': self.settings_menu_apply,
             'help_pressed': self.open_welcome_window,
+            'hotkeys_pressed': self.open_hotkey_window,
             'quit_pressed': self.quit_pressed,
             'app_picked': self.on_app_picked,
             'apps_view_changed': self.on_apps_view_changed,
@@ -510,6 +521,65 @@ class GtkController(SignalModel):
         self.welcome_window = WelcomeWindow(transient_for=self.window)
         self.text_scaler.track(self.welcome_window)
         self.welcome_window.present()
+
+    #
+    # # Hotkeys
+    #
+    def open_hotkey_window(self, *_):
+        if self.hotkey_window is not None:
+            self.hotkey_window.present()
+            return
+
+        self.hotkey_window = HotkeyWindow(self.config_model.volume_step, transient_for=self.window)
+        self.hotkey_window.connect('apply', lambda _, edits: self.emit('hotkeys_apply', edits))
+        self.hotkey_window.connect('configure', lambda _: self.emit('hotkeys_configure'))
+        self.hotkey_window.connect('step_changed', self._on_hotkey_step_changed)
+        self.hotkey_window.connect('close-request', self._on_hotkey_window_close)
+        self.hotkey_window.set_devices(self._hotkey_devices())
+        self.text_scaler.track(self.hotkey_window)
+        self.hotkey_window.present()
+        self.emit('hotkeys_probe')
+
+    def _on_hotkey_window_close(self, window):
+        self.text_scaler.untrack(window)
+        self.hotkey_window = None
+        return False
+
+    def _on_hotkey_step_changed(self, _, step):
+        self.config_model.volume_step = step
+
+    def _hotkey_devices(self):
+        return [
+            (device_type, device_id, device.nick, dict(device.hotkeys))
+            for device_type in SECTION_ORDER
+            for device_id, device in sorted(self.device_repository.get_devices_by_type(device_type).items(), key=lambda i: int(i[0]))
+        ]
+
+    def hotkeys_state_changed(self, controller):
+        if self.hotkey_window is not None:
+            self.hotkey_window.set_devices(self._hotkey_devices())
+            self.hotkey_window.set_state(controller)
+
+    def perform_hotkey(self, device_type, device_id, action, held):
+        '''
+        Do what a hotkey stands for, by way of the strip's own controls: it is the same as using them.
+        Returns if a held key can go on.
+        '''
+        widget = self.content.device_box[device_type].widgets.get(device_id)
+        if widget is None or not widget.device_model.present:
+            return False
+
+        if action == 'mute':
+            widget.mute_widget.set_active(not widget.mute_widget.get_active())
+            return False
+
+        volume = widget.volume_widget.get_value()
+        step = self.config_model.volume_step
+        target = volume + step if action == 'up' else volume - step
+        if held and action == 'up':
+            target = min(target, max(volume, HOTKEY_HOLD_CEILING))
+        widget.volume_widget.set_value(target)
+        return widget.volume_widget.get_value() != volume
 
     def connection_settings_hijack(self, device_widget, output_type, output_id, input_type, input_id):
         '''

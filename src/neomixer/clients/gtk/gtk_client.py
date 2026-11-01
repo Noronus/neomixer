@@ -15,6 +15,7 @@ from neomixer.controller.gtk_controller import GtkController
 from neomixer.controller.app_registry import AppRegistry
 from neomixer.controller.device_controller import DeviceController
 from neomixer.controller.event_controller import EventController
+from neomixer.controller.hotkey_controller import HotkeyController
 from neomixer.clients.gtk import style
 from neomixer.clients.gtk.tray import TrayIcon
 
@@ -83,11 +84,16 @@ class GtkClient(Gtk.Application):
         self.device_controller = DeviceController(device_repository=self.device_repository)
         self.gtk_controller = GtkController(device_repository=self.device_repository)
         self.app_registry = AppRegistry(device_repository=self.device_repository)
+        self.hotkey_controller = HotkeyController(self.device_repository, self.gtk_controller.perform_hotkey)
         self.connect('shutdown', self.on_shutdown)
 
         quit_action = Gio.SimpleAction.new('quit', None)
         quit_action.connect('activate', lambda *_: self.quit())
         self.add_action(quit_action)
+
+        hotkey_action = Gio.SimpleAction.new('hotkey', GLib.VariantType('(sss)'))
+        hotkey_action.connect('activate', self._on_hotkey_command)
+        self.add_action(hotkey_action)
 
         # A session ending or a power button only sends these
         for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
@@ -95,6 +101,10 @@ class GtkClient(Gtk.Application):
 
         # The config is written as it changes, a crash or a power cut can't take more with it
         GLib.timeout_add_seconds(AUTOSAVE_SECONDS, self._autosave)
+
+    def _on_hotkey_command(self, _, parameter):
+        if self.window is not None:
+            self.hotkey_controller.run_action(*parameter.unpack())
 
     def _on_unix_signal(self):
         self.quit()
@@ -127,6 +137,7 @@ class GtkClient(Gtk.Application):
 
         self.app_registry.bootstrap()
         self.event_controller.start_listen()
+        self.hotkey_controller.start()
 
         try:
             self.tray = TrayIcon(self.gtk_controller.toggle_window, self.quit)
@@ -150,6 +161,7 @@ class GtkClient(Gtk.Application):
             return
 
         self.gtk_controller.save_window_state()
+        self.hotkey_controller.stop()
         if self.config_model.cleanup is True:
             self.device_controller.cleanup()
 
@@ -190,11 +202,16 @@ class GtkClient(Gtk.Application):
             'app_device': self.app_registry.set_device,
             'app_forget': self.app_registry.forget,
             'app_add': self.app_registry.add_manually,
+            'hotkeys_probe': self.hotkey_controller.probe,
+            'hotkeys_apply': self.hotkey_controller.apply,
+            'hotkeys_configure': self.hotkey_controller.configure,
             'quit': self.quit,
         }
 
         for signal_name, callback in signal_map.items():
             self.gtk_controller_handlers[signal_name] = self.gtk_controller.connect(signal_name, callback)
+
+        self.hotkey_controller.connect('state_changed', self.gtk_controller.hotkeys_state_changed)
 
         # Streams may be waiting for a device that just came back, runs after handle_hotplug
         self.gtk_controller.connect('pa_hotplug', lambda *_: self.app_registry.device_appeared())
@@ -208,6 +225,8 @@ class GtkClient(Gtk.Application):
 
         for signal_name, callback in signal_map.items():
             self.device_controller_handlers[signal_name] = self.device_controller.connect(signal_name, callback)
+            # A hotkey's description has the device's name, and its hotkeys go with it
+            self.device_controller.connect(signal_name, on_main_thread(lambda *_: self.hotkey_controller.sync()))
 
     def connect_event_controller_events(self):
         signal_map = {

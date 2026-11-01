@@ -14,7 +14,7 @@ from neomixer.repository.device_repository import DeviceRepository
 from neomixer.controller.device_controller import DeviceController
 
 # pylint: disable=wrong-import-order,wrong-import-position
-from gi.repository import Gio  # noqa: E402
+from gi.repository import Gio, GLib  # noqa: E402
 # pylint: enable=wrong-import-order,wrong-import-position
 
 LOG = logging.getLogger("generic")
@@ -36,6 +36,22 @@ def quit_running():
     if app.get_is_remote():
         app.activate_action('quit', None)
         app.get_dbus_connection().flush_sync(None)
+
+
+def hotkey(device_type, device_id, action):
+    '''
+    Do what a hotkey does, in the running instance: for a desktop without global shortcuts for
+    programs, where this is what its own keys can run.
+    '''
+    app = Gio.Application(application_id=APP_ID)
+    app.register(None)
+    if not app.get_is_remote():
+        print('NeoMixer is not running', file=sys.stderr)
+        return 1
+
+    app.activate_action('hotkey', GLib.Variant('(sss)', (device_type, device_id, action)))
+    app.get_dbus_connection().flush_sync(None)
+    return 0
 
 
 def init_devices():
@@ -83,6 +99,7 @@ def main():
 
     arg_map = {
         'quit': quit_running,
+        'hotkey': hotkey,
         'init': init_devices,
         'cleanup': cleanup_devices,
         'mute': mute,
@@ -97,9 +114,7 @@ def main():
         return start_gui(parsed.hidden)
 
     args = [value for name, value in vars(parsed).items() if name not in ('command', 'hidden')]
-    arg_map[command](*args)
-
-    return 0
+    return arg_map[command](*args) or 0
 
 
 if __name__ == '__main__':

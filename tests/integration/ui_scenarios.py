@@ -1605,3 +1605,727 @@ def eq_starts_when_its_output_arrives(d):
     strip_widget.device_model.eq.enabled = False
     d.ui._on_eq_window_changed(None, 'a', '4')
     yield 0.3
+
+
+class FakePortal:
+    '''A desktop with global shortcuts for a scenario, see fake_portal.py.'''
+
+    def __init__(self, d, *flags):
+        import os
+        import subprocess
+        import sys
+        from neomixer.utils import shortcuts_portal
+        path = os.path.join(os.path.dirname(__file__), 'fake_portal.py')
+        sandbox = os.environ['NEOMIXER_SANDBOX']
+        with open(os.path.join(sandbox, 'log', 'fake_portal.log'), 'a', encoding='utf-8') as log:
+            self.process = subprocess.Popen(
+                [sys.executable, path, os.path.join(sandbox, 'state', 'fake_portal.json'), *flags],
+                stdout=log, stderr=log
+            )
+        d.players.append(self)  # ends with the scenario, whatever happens to it
+        # The sandbox's KWin has the real name of this service, the kde_ scenarios use that one
+        shortcuts_portal.KGLOBALACCEL = 'org.neomixer.FakeKGlobalAccel'
+
+    def _call(self, method, *arguments):
+        from gi.repository import Gio, GLib
+        signature = '(' + 's' * len(arguments) + ')'
+        return Gio.bus_get_sync(Gio.BusType.SESSION).call_sync(
+            'org.freedesktop.portal.Desktop', '/org/freedesktop/portal/desktop', 'org.neomixer.FakePortal', method,
+            GLib.Variant(signature, arguments) if arguments else None, None, Gio.DBusCallFlags.NONE, 3000, None
+        )
+
+    def state(self):
+        import json
+        return json.loads(self._call('State').unpack()[0])
+
+    def press(self, shortcut):
+        self._call('Press', shortcut)
+
+    def release(self, shortcut):
+        self._call('Release', shortcut)
+
+    def answer(self, answer):
+        self._call('SetAnswer', answer)
+
+    def quit(self):
+        self._call('Quit')
+        self.process.wait(timeout=5)
+
+    def stop(self):
+        self.process.terminate()
+        self.process.wait(timeout=5)
+
+
+def _key(gdk_key, ctrl=True, alt=True):
+    '''What a key press hands the window, without the compositor: the kde_ scenarios have real keys.'''
+    from gi.repository import Gdk
+    state = Gdk.ModifierType(0)
+    if ctrl:
+        state |= Gdk.ModifierType.CONTROL_MASK
+    if alt:
+        state |= Gdk.ModifierType.ALT_MASK
+    return gdk_key, 0, state
+
+
+def _take_key(window, cell, gdk_key, ctrl=True, alt=True):
+    window.buttons[cell].emit('clicked')
+    window.on_key_pressed(None, *_key(gdk_key, ctrl, alt))
+
+
+def _volume(device):
+    from neomixer.scripts import pmctl
+    return round(pmctl.get_device_by_name(device.device_type, device.name).volume.values[0] * 100)
+
+
+def _server_mute(device):
+    from neomixer.scripts import pmctl
+    return bool(pmctl.get_device_by_name(device.device_type, device.name).mute)
+
+
+def hotkeys_nothing_set(d):
+    '''Whoever has no hotkeys never hears of it, and the desktop does not hear of them.'''
+    yield 1.0
+    d.check(d.app.hotkey_controller.portal.connection is None, 'the portal is left alone')
+    d.content.settings_box.hotkeys_button.emit('clicked')
+    yield 0.5
+    window = d.ui.hotkey_window
+    d.check(window is not None and window.get_visible(), 'the settings menu opens the hotkey window')
+    d.check(d.app.hotkey_controller.available is False, 'no portal: it knows')
+    d.check('neomixer hotkey' in window.command.get_label() and window.command.get_visible(), 'and says what to do instead')
+    d.check(not any(button.get_sensitive() for button in window.buttons.values()), 'keys cannot be set')
+    columns = {key[:2] for key in window.buttons}
+    expected = {(device_type, device_id) for device_type, devices in d.app.device_repository.get_all_devices().items()
+                for device_id in devices}
+    d.check(columns == expected, f'every input and output is listed: {len(columns)}')
+    d.check(len(window.buttons) == 3 * len(expected), 'with mute, louder and softer')
+    d.shot('hotkeys_no_portal', window)
+
+    # "neomixer hotkey" is what keys set up in the desktop run
+    import subprocess
+    import sys
+    device = d.app.device_repository.get_device('vi', '1')
+    before = _volume(device)
+    # Not waiting for it: the app has to be running to answer
+    command = subprocess.Popen([sys.executable, '-m', 'neomixer.main', 'hotkey', 'vi', '1', 'down'])
+    yield 2.5
+    d.check(command.poll() == 0, f'the command ends: {command.poll()}')
+    d.check(_volume(device) == before - 5, f'the command turns it down: {before} to {_volume(device)}')
+    subprocess.Popen([sys.executable, '-m', 'neomixer.main', 'hotkey', 'vi', '1', 'up'])
+    yield 2.5
+    d.check(_volume(device) == before, 'and up')
+    d.ui.hotkey_window.close()
+    yield 0.2
+
+
+def hotkeys_work(d):
+    '''All device types, what is seen in the window, on the server and at the desktop.'''
+    from gi.repository import Gdk
+    from neomixer.utils.hotkeys import shortcut_id
+
+    portal = FakePortal(d)
+    yield 0.3
+    controller = d.app.hotkey_controller
+    repository = d.app.device_repository
+    d.ui.open_hotkey_window()
+    yield 0.5
+    window = d.ui.hotkey_window
+    d.check(controller.available is True, 'the portal is found')
+    d.check(all(button.get_sensitive() for button in window.buttons.values()), 'keys can be set')
+
+    # Taking a key, and what does not make one
+    mute = ('vi', '1', 'mute')
+    window.buttons[mute].emit('clicked')
+    d.check(window.buttons[mute].get_label() != '—', 'asks for keys')
+    yield 0.2
+    d.shot('hotkeys_asks', window)
+    window.on_key_pressed(None, *_key(Gdk.KEY_Control_L, ctrl=True, alt=False))
+    d.check(window.capturing == mute, 'a modifier alone keeps waiting')
+    window.on_key_pressed(None, *_key(Gdk.KEY_Escape, ctrl=False, alt=False))
+    d.check(window.capturing is None and not window.edits, 'esc cancels')
+    _take_key(window, mute, Gdk.KEY_m, ctrl=False, alt=False)
+    d.check(window.capturing == mute and not window.edits, 'a typing key alone is refused')
+    d.check('typing' in window.status.get_label(), f'and it says why: {window.status.get_label()}')
+    window.on_key_pressed(None, *_key(Gdk.KEY_m))
+    d.check(window.edits == {mute: 'CTRL+ALT+m'}, f'with modifiers it is taken: {window.edits}')
+    d.check(window.buttons[mute].get_label() == 'Ctrl+Alt+M', window.buttons[mute].get_label())
+    _take_key(window, ('vi', '2', 'mute'), Gdk.KEY_m)
+    d.check(('vi', '2', 'mute') not in window.edits, 'the same keys twice are refused')
+    d.check('already used' in window.status.get_label(), f'and it says why: {window.status.get_label()}')
+    window.on_key_pressed(None, *_key(Gdk.KEY_F13, ctrl=False, alt=False))
+    d.check(window.edits[('vi', '2', 'mute')] == 'F13', 'a key that types nothing works alone')
+
+    # One of each kind of device
+    cells = {
+        ('vi', '1', 'up'): Gdk.KEY_u, ('vi', '1', 'down'): Gdk.KEY_d,
+        ('hi', '1', 'mute'): Gdk.KEY_q, ('hi', '1', 'up'): Gdk.KEY_w, ('hi', '1', 'down'): Gdk.KEY_e,
+        ('a', '1', 'mute'): Gdk.KEY_a, ('a', '1', 'up'): Gdk.KEY_s, ('a', '1', 'down'): Gdk.KEY_f,
+        ('b', '1', 'mute'): Gdk.KEY_z, ('b', '1', 'up'): Gdk.KEY_x, ('b', '1', 'down'): Gdk.KEY_c,
+    }
+    for cell, gdk_key in cells.items():
+        _take_key(window, cell, gdk_key)
+    yield 0.2
+    d.shot('hotkeys_edited', window)
+    d.check(portal.state()['known'] == {}, 'nothing goes to the desktop before applying')
+
+    window.apply_button.emit('clicked')
+    d.check(controller.busy and 'confirm' in window.status.get_label(), f'says to confirm: {window.status.get_label()}')
+    yield 0.6
+    state = portal.state()
+    d.check(len(state['dialogs']) == 1 and len(state['dialogs'][0]) == 13, f'one dialog for all of them: {len(state["dialogs"])}')
+    d.check(not controller.busy and not window.edits, 'done')
+    d.check(window.buttons[mute].get_label() == 'Ctrl+Alt+M (desktop)', f'shows the desktop\'s word: {window.buttons[mute].get_label()}')
+    d.check('work now' in window.status.get_label(), window.status.get_label())
+    yield 0.2
+    d.shot('hotkeys_applied', window)
+
+    # What the keys do, on every kind of device
+    for device_type in ('vi', 'hi', 'a', 'b'):
+        device = repository.get_device(device_type, '1')
+        strip_widget = d.content.device_box[device_type].widgets['1']
+        shortcut = shortcut_id(device_type, '1', 'mute', device.hotkeys['mute'])
+        muted = _server_mute(device)
+        portal.press(shortcut)
+        portal.release(shortcut)
+        yield 0.3
+        d.check(_server_mute(device) is not muted, f'{device_type}: mute on the server')
+        d.check(strip_widget.mute_widget.get_active() is not muted, f'{device_type}: and on the strip')
+        d.check(device.mute is not muted, f'{device_type}: and in the config')
+        portal.press(shortcut)
+        portal.release(shortcut)
+        yield 0.3
+        d.check(_server_mute(device) is muted, f'{device_type}: and back')
+
+        before = _volume(device)
+        for action, change in (('down', -5), ('up', 5)):
+            shortcut = shortcut_id(device_type, '1', action, device.hotkeys[action])
+            portal.press(shortcut)
+            portal.release(shortcut)
+            yield 0.3
+            d.check(_volume(device) == before + change, f'{device_type}: {action} on the server: {_volume(device)}')
+            d.check(round(strip_widget.volume_widget.get_value()) == before + change, f'{device_type}: {action} on the fader')
+            before = _volume(device)
+
+    # Also without the window, it is about what happens in other programs
+    window.close()
+    d.ui.hide_window()
+    yield 0.3
+    device = repository.get_device('vi', '1')
+    strip_widget = d.content.device_box['vi'].widgets['1']
+    up = shortcut_id('vi', '1', 'up', device.hotkeys['up'])
+    down = shortcut_id('vi', '1', 'down', device.hotkeys['down'])
+    strip_widget.volume_widget.set_value(50)
+    yield 0.2
+    portal.press(up)
+    portal.release(up)
+    yield 0.8
+    d.check(_volume(device) == 55, f'a short press is one step: {_volume(device)}')
+
+    # Holding on
+    portal.press(up)
+    yield 0.9
+    portal.release(up)
+    yield 0.1
+    held = _volume(device)
+    d.check(held > 65, f'holding keeps going: {held}')
+    yield 0.5
+    d.check(_volume(device) == held, 'and stops with the key')
+
+    portal.press(up)
+    yield 3.0
+    d.check(_volume(device) == 100, f'holding stops at 0 dB: {_volume(device)}')
+    portal.release(up)
+    yield 0.1
+    portal.press(up)
+    portal.release(up)
+    yield 0.2
+    d.check(_volume(device) == 105, f'a press goes past it: {_volume(device)}')
+    portal.press(up)
+    yield 1.0
+    d.check(_volume(device) == 110, f'holding does not: {_volume(device)}')
+    portal.release(up)
+
+    # Desktops that repeat a held key by themselves count as one press
+    yield 0.1
+    strip_widget.volume_widget.set_value(50)
+    muted = _server_mute(device)
+    mute_shortcut = shortcut_id('vi', '1', 'mute', device.hotkeys['mute'])
+    for _ in range(5):
+        portal.press(mute_shortcut)
+        yield 0.05
+    portal.release(mute_shortcut)
+    yield 0.2
+    d.check(_server_mute(device) is not muted, 'a repeating key toggles mute once')
+    portal.press(mute_shortcut)
+    portal.release(mute_shortcut)
+    yield 0.2
+
+    # The step is a setting
+    d.config = d.app.config_model
+    d.app.config_model.volume_step = 10
+    portal.press(down)
+    portal.release(down)
+    yield 0.3
+    d.check(_volume(device) == 40, f'a bigger step: {_volume(device)}')
+    d.app.config_model.volume_step = 5
+
+    # A key from before, that the desktop may still hold, does nothing
+    portal.press(shortcut_id('vi', '1', 'down', 'CTRL+ALT+k'))
+    yield 0.2
+    d.check(_volume(device) == 40, 'an old key does nothing')
+
+    # Unplugged: nothing to do, and no errors
+    other = repository.get_device('a', '1')
+    other.present = False
+    before = _volume(other)
+    shortcut = shortcut_id('a', '1', 'up', other.hotkeys['up'])
+    portal.press(shortcut)
+    portal.release(shortcut)
+    yield 0.2
+    d.check(_volume(other) == before, 'a device that is not there is left alone')
+    other.present = True
+    d.check(len(portal.state()['dialogs']) == 1, 'and nothing asked the desktop again')
+
+    # As it was, for the scenarios after this one
+    strip_widget.volume_widget.set_value(100)
+    yield 3.0  # past the autosave
+    portal.quit()
+
+
+def hotkeys_after_restart(d):
+    '''They come back without asking, and the changes go to the desktop.'''
+    from gi.repository import Gdk
+    from neomixer.utils.hotkeys import shortcut_id
+
+    portal = FakePortal(d)
+    # The app was first here: it notices the portal when it comes
+    yield 1.0
+    state = portal.state()
+    d.check(state['dialogs'] == [], f'no question after a restart: {state["dialogs"]}')
+    d.check(len(state['known']) == 13, f'all hotkeys are still there: {len(state["known"])}')
+    device = d.app.device_repository.get_device('vi', '1')
+    d.check(device.hotkeys['mute'] == 'CTRL+ALT+m', 'also in the config')
+
+    # A device of its own to rename and remove further on, others need the fixture's
+    popover = d.content.create_device_button['vi'].get_popover()
+    popover.popup()
+    popover.nick_widget.set_option('extra')
+    popover.name_widget.set_option('extra')
+    popover.combobox_widget.set_active_name('Stereo')
+    d.content._on_device_create(None, popover)
+    yield 0.8
+    extra = next(device_id for device_id, other in d.app.device_repository.get_devices_by_type('vi').items()
+                 if other.name == 'extra')
+    shortcut = shortcut_id('vi', '1', 'mute', 'CTRL+ALT+m')
+    muted = _server_mute(device)
+    portal.press(shortcut)
+    portal.release(shortcut)
+    yield 0.3
+    d.check(_server_mute(device) is not muted, 'and work')
+    portal.press(shortcut)
+    portal.release(shortcut)
+    yield 0.3
+
+    # Another key: asks about that one, and the old one is free again
+    d.ui.open_hotkey_window()
+    yield 0.3
+    window = d.ui.hotkey_window
+    _take_key(window, ('vi', '1', 'mute'), Gdk.KEY_n)
+    _take_key(window, ('vi', '2', 'mute'), Gdk.KEY_m)
+    window.apply_button.emit('clicked')
+    yield 0.6
+    state = portal.state()
+    d.check(len(state['dialogs']) == 1 and len(state['dialogs'][0]) == 2, f'asks about the new ones: {state["dialogs"]}')
+    d.check(shortcut not in state['known'], 'the old one is gone at the desktop')
+    d.check(device.hotkeys['mute'] == 'CTRL+ALT+n', 'the new one is set')
+    d.check(d.app.device_repository.get_device('vi', '2').hotkeys['mute'] == 'CTRL+ALT+m', 'and the old keys can go to another device')
+
+    # Not confirmed: not set, and the next time it asks again
+    portal.answer('cancel')
+    _take_key(window, ('vi', extra, 'up'), Gdk.KEY_i)
+    window.apply_button.emit('clicked')
+    yield 0.8
+    d.check('up' not in d.app.device_repository.get_device('vi', extra).hotkeys, 'refused keys are not set')
+    d.check('did not take' in window.status.get_label(), f'it says so: {window.status.get_label()}')
+    d.check(window.buttons[('vi', extra, 'up')].get_label() == '—', 'the field is empty again')
+    d.check(shortcut_id('vi', extra, 'up', 'CTRL+ALT+i') not in portal.state()['known'], 'the desktop was told to forget')
+    d.check(device.hotkeys['mute'] == 'CTRL+ALT+n', 'the others stay')
+    yield 0.2
+    d.shot('hotkeys_not_confirmed', window)
+
+    portal.answer('accept')
+    asked = len(portal.state()['dialogs'])
+    _take_key(window, ('vi', extra, 'up'), Gdk.KEY_i)
+    window.apply_button.emit('clicked')
+    yield 0.6
+    state = portal.state()
+    d.check(len(state['dialogs']) == asked + 1, 'the same keys are asked about again')
+    d.check(d.app.device_repository.get_device('vi', extra).hotkeys['up'] == 'CTRL+ALT+i', 'and then set')
+
+    # Closing the window with changes applies them
+    _take_key(window, ('vi', extra, 'down'), Gdk.KEY_o)
+    window.close()
+    yield 0.6
+    d.check(d.ui.hotkey_window is None, 'the window is gone')
+    d.check(d.app.device_repository.get_device('vi', extra).hotkeys['down'] == 'CTRL+ALT+o', 'and its changes are applied')
+
+    # A renamed device is told to the desktop, without asking
+    asked = len(portal.state()['dialogs'])
+    third = d.app.device_repository.get_device('vi', extra)
+    strip_widget = d.content.device_box['vi'].widgets[extra]
+    strip_widget._on_edit_pressed()
+    yield 0.1
+    strip_widget.popover.nick_widget.set_option('renamed')
+    strip_widget.popover.confirm_button.emit('clicked')
+    yield 1.0
+    d.check(third.nick == 'renamed', 'renamed')
+    d.check(third.hotkeys['down'] == 'CTRL+ALT+o', 'keeps its hotkeys')
+    d.check(len(portal.state()['dialogs']) == asked, 'without asking about keys it already has')
+    gone = [shortcut_id('vi', extra, 'down', 'CTRL+ALT+o'), shortcut_id('vi', extra, 'up', 'CTRL+ALT+i')]
+
+    # A removed device takes its hotkeys along
+    strip_widget.emit('device_remove')
+    yield 1.0
+    state = portal.state()
+    d.check(not any(shortcut in state['known'] for shortcut in gone), 'a removed device takes its hotkeys along')
+
+    # A new portal knows nothing of this one, as after an update
+    portal.quit()
+    yield 0.3
+    d.check(d.app.hotkey_controller.portal.session is None, 'noticed the portal is gone')
+    new_portal = FakePortal(d)
+    yield 1.0
+    state = new_portal.state()
+    d.check(state['sessions'] == 1, 'found the new one')
+    d.check(state['dialogs'] == [], 'without asking about keys it knows')
+    muted = _server_mute(device)
+    shortcut = shortcut_id('vi', '1', 'mute', device.hotkeys['mute'])
+    new_portal.press(shortcut)
+    new_portal.release(shortcut)
+    yield 0.3
+    d.check(_server_mute(device) is not muted, 'and the keys work')
+    new_portal.press(shortcut)
+    new_portal.release(shortcut)
+    yield 0.2
+
+    # All of them off: that is the end of it, an old portal would not survive being told with an empty list
+    d.ui.open_hotkey_window()
+    yield 0.3
+    window = d.ui.hotkey_window
+    window.configure_button.emit('clicked')
+    yield 0.2
+    d.check(new_portal.state()['configured'] == 1, "the button opens the desktop's settings")
+    d.check(window.configure_button.get_visible(), 'that is there with this portal')
+    for cell in [cell for cell in window.buttons if window.trigger_of(cell)]:
+        window.buttons[cell].emit('clicked')
+        window.on_key_pressed(None, *_key(Gdk.KEY_BackSpace, ctrl=False, alt=False))
+    d.check('—' == window.buttons[('vi', '1', 'mute')].get_label(), 'backspace removes')
+    window.apply_button.emit('clicked')
+    yield 0.6
+    state = new_portal.state()
+    d.check(state['known'] == {}, f'the desktop forgot them: {state["known"]}')
+    d.check(state['empty_binds'] == 0, 'without an empty list')
+    d.check(state['sessions'] == 0, 'and nothing is listening any more')
+    d.check(not any(device.hotkeys for devices in d.app.device_repository.get_all_devices().values() for device in devices.values()),
+            'the config has none left')
+    new_portal.quit()
+    yield 2.5  # past the autosave
+
+
+def hotkeys_other_desktops(d):
+    '''A portal without KDE's service next to it, and one from before version 2.'''
+    from gi.repository import Gdk
+    from neomixer.utils.hotkeys import shortcut_id
+
+    portal = FakePortal(d, '--version', '1', '--no-kglobalaccel')
+    yield 0.3
+    d.ui.open_hotkey_window()
+    yield 0.4
+    window = d.ui.hotkey_window
+    _take_key(window, ('vi', '1', 'mute'), Gdk.KEY_m)
+    window.apply_button.emit('clicked')
+    yield 0.6
+    d.check(not window.configure_button.get_visible(), "version 1 has no way to open the desktop's settings")
+    device = d.app.device_repository.get_device('vi', '1')
+    shortcut = shortcut_id('vi', '1', 'mute', 'CTRL+ALT+m')
+    d.check(portal.state()['known'].get(shortcut), 'bound')
+    muted = _server_mute(device)
+    portal.press(shortcut)
+    portal.release(shortcut)
+    yield 0.3
+    d.check(_server_mute(device) is not muted, 'works')
+    portal.press(shortcut)
+    portal.release(shortcut)
+    yield 0.3
+
+    window.buttons[('vi', '1', 'mute')].emit('clicked')
+    window.on_key_pressed(None, *_key(Gdk.KEY_BackSpace, ctrl=False, alt=False))
+    window.apply_button.emit('clicked')
+    yield 0.6
+    state = portal.state()
+    d.check(state['empty_binds'] == 0, 'the last one goes without an empty list, that crashes this portal')
+    d.check(state['sessions'] == 0, 'and nothing is listening any more')
+    d.check(portal.process.poll() is None, 'the portal is alive')
+    portal.quit()
+    import os
+    os.remove(os.path.join(os.environ['NEOMIXER_SANDBOX'], 'state', 'fake_portal.json'))
+
+
+def _real_keys(*keys, hold=None):
+    '''Real key presses in the session's KWin, see kde_keys.py. Not waited for: holding one has to be seen.'''
+    import os
+    import subprocess
+    import sys
+    command = [sys.executable, os.path.join(os.path.dirname(__file__), 'kde_keys.py')]
+    if hold:
+        command += ['--hold', str(hold)]
+    return subprocess.Popen(command + list(keys))
+
+
+def _kde_shortcuts():
+    '''What KDE itself has for this app, in its settings file.'''
+    import os
+    path = os.path.join(os.environ['XDG_CONFIG_HOME'], 'kglobalshortcutsrc')
+    shortcuts = {}
+    in_section = False
+    if not os.path.exists(path):
+        return shortcuts
+    with open(path, encoding='utf-8') as settings:
+        for line in settings:
+            line = line.strip()
+            if line.startswith('['):
+                in_section = line == '[org.neomixer.NeoMixer]'
+            elif in_section and '=' in line and not line.startswith('_k_'):
+                name, value = line.split('=', 1)
+                shortcuts[name.replace('\\\\', '\\')] = value.split(',')[0]
+    return shortcuts
+
+
+def _set_keys(d, window, cell, *keys):
+    window.buttons[cell].emit('clicked')
+    _real_keys(*keys)
+    yield 0.9
+
+
+def _screen(d, name):
+    import os
+    import subprocess
+    import sys
+    subprocess.run([sys.executable, os.path.join(os.path.dirname(__file__), 'kde_keys.py'),
+                    '--screenshot', os.path.join(d.out_dir, f'{name}.png')], check=True)
+
+
+def kde_hotkeys_set(d):
+    '''From clicking a field to a key working in the background, with nothing faked.'''
+    yield 1.0
+    controller = d.app.hotkey_controller
+    repository = d.app.device_repository
+    d.ui.open_hotkey_window()
+    yield 1.5
+    window = d.ui.hotkey_window
+    d.check(controller.available is True, 'KDE has global shortcuts')
+    d.check(controller.portal.version >= 2, f'version {controller.portal.version}')
+
+    # Real keys go to the window
+    mute = ('vi', '1', 'mute')
+    window.buttons[mute].emit('clicked')
+    _real_keys('esc')
+    yield 0.9
+    d.check(window.capturing is None and not window.edits, 'esc cancels')
+    window.buttons[mute].emit('clicked')
+    _real_keys('m')
+    yield 0.9
+    d.check(window.capturing == mute and not window.edits, 'm alone is refused')
+    _real_keys('ctrl', 'alt', 'm')
+    yield 0.9
+    d.check(window.edits == {mute: 'CTRL+ALT+m'}, f'ctrl alt m is taken: {window.edits}')
+    d.check(window.buttons[mute].get_label() == 'Ctrl+Alt+M', window.buttons[mute].get_label())
+
+    # Saying no to all of them: not set, and asked again the next time
+    window.apply_button.emit('clicked')
+    yield 1.5
+    d.check(controller.busy, 'the dialog is up')
+    _screen(d, 'kde_dialog')
+    _real_keys('alt', 'c')
+    yield 1.5
+    d.check(not controller.busy, 'cancelled')
+    d.check('mute' not in repository.get_device('vi', '1').hotkeys, 'nothing was set')
+    d.check('did not take' in window.status.get_label(), window.status.get_label())
+    d.check(window.buttons[mute].get_label() == '—', 'the field is empty')
+    d.check(_kde_shortcuts() == {}, f'KDE keeps nothing of it: {_kde_shortcuts()}')
+
+    # All kinds of keys, on all kinds of devices
+    d.ui.open_hotkey_window()
+    yield 0.5
+    for cell, keys in (
+        (mute, ('ctrl', 'alt', 'm')),
+        (('vi', '1', 'up'), ('ctrl', 'alt', 'u')),
+        (('vi', '1', 'down'), ('ctrl', 'shift', '1')),
+        (('a', '1', 'mute'), ('f9',)),
+        (('a', '1', 'up'), ('meta', 'y')),
+        (('hi', '1', 'mute'), ('ctrl', 'alt', 'j')),
+        (('b', '1', 'mute'), ('ctrl', 'alt', 'k')),
+    ):
+        yield from _set_keys(d, window, cell, *keys)
+    d.check(window.edits[('vi', '1', 'down')] == 'CTRL+exclam', f'a symbol, the only way KDE fires on it: {window.edits[("vi", "1", "down")]}')
+    d.check(window.buttons[('vi', '1', 'down')].get_label() == 'Ctrl+!', window.buttons[('vi', '1', 'down')].get_label())
+    d.check(window.edits[('a', '1', 'mute')] == 'F9', 'f9 works alone')
+    d.check(window.edits[('a', '1', 'up')] == 'LOGO+y', f'with meta: {window.edits[("a", "1", "up")]}')
+    d.shot('kde_edited', window)
+
+    window.apply_button.emit('clicked')
+    yield 1.5
+    d.check(controller.busy, 'the dialog is up')
+    _screen(d, 'kde_dialog_all')
+    _real_keys('alt', 'o')
+    yield 1.5
+    d.check(not controller.busy, 'confirmed')
+    d.check('work now' in window.status.get_label(), window.status.get_label())
+    kde = _kde_shortcuts()
+    d.check(len(kde) == 7, f'KDE has them: {kde}')
+    d.check(kde.get('vi-1-mute-CTRL+ALT+m') == 'Ctrl+Alt+M', 'with their keys')
+    d.check(all(controller.bound.values()), f'and says which: {controller.bound}')
+    yield 0.2
+    d.shot('kde_applied', window)
+
+    # With the mixer hidden, as with any other program in front
+    window.close()
+    d.ui.hide_window()
+    yield 0.5
+    for device_type, keys in (('vi', ('ctrl', 'alt', 'm')), ('a', ('f9',)), ('hi', ('ctrl', 'alt', 'j')), ('b', ('ctrl', 'alt', 'k'))):
+        device = repository.get_device(device_type, '1')
+        muted = _server_mute(device)
+        _real_keys(*keys)
+        yield 0.9
+        d.check(_server_mute(device) is not muted, f'{device_type}: mute with real keys')
+        _real_keys(*keys)
+        yield 0.9
+        d.check(_server_mute(device) is muted, f'{device_type}: and back')
+
+    device = repository.get_device('vi', '1')
+    fader = d.content.device_box['vi'].widgets['1'].volume_widget
+    fader.set_value(60)
+    yield 0.2
+    _real_keys('ctrl', 'alt', 'u')
+    yield 1.2
+    d.check(_volume(device) == 65, f'a press is one step: {_volume(device)}')
+    _real_keys('ctrl', 'shift', '1')
+    yield 1.2
+    d.check(_volume(device) == 60, f'also with shift: {_volume(device)}')
+
+    fader.set_value(40)
+    _real_keys('ctrl', 'alt', 'u', hold=0.8)
+    yield 2.0
+    held = _volume(device)
+    d.check(50 < held < 100, f'holding keeps going, and it stops with the key: {held}')
+    yield 0.5
+    d.check(_volume(device) == held, 'it did stop')
+    fader.set_value(70)
+    _real_keys('ctrl', 'alt', 'u', hold=2.5)
+    yield 4.0
+    d.check(_volume(device) == 100, f'holding stops at 0 dB: {_volume(device)}')
+    _real_keys('ctrl', 'alt', 'u')
+    yield 1.0
+    d.check(_volume(device) == 105, f'a press goes past it: {_volume(device)}')
+    fader.set_value(100)
+
+    outputs = repository.get_device('a', '1')
+    before = _volume(outputs)
+    _real_keys('meta', 'y')
+    yield 1.2
+    d.check(_volume(outputs) == before + 5, f'with meta: {_volume(outputs)}')
+    yield 2.5  # past the autosave
+
+
+def kde_hotkeys_after_reboot(d):
+    '''They come back after a reboot with no question, and changing them works out with KDE.'''
+    yield 3.0
+    controller = d.app.hotkey_controller
+    repository = d.app.device_repository
+    d.check(not controller.busy, 'no question at the start')
+    d.check(len(controller.bound) == 7 and all(controller.bound.values()), f'all are there: {controller.bound}')
+    device = repository.get_device('vi', '1')
+    muted = _server_mute(device)
+    _real_keys('ctrl', 'alt', 'm')
+    yield 1.0
+    d.check(_server_mute(device) is not muted, 'and work')
+    _real_keys('ctrl', 'alt', 'm')
+    yield 1.0
+
+    # Another key: the old one does nothing any more
+    d.ui.open_hotkey_window()
+    yield 1.0
+    window = d.ui.hotkey_window
+    yield from _set_keys(d, window, ('vi', '1', 'mute'), 'ctrl', 'alt', 'n')
+    window.apply_button.emit('clicked')
+    yield 1.5
+    d.check(controller.busy, 'asks about the new one')
+    _real_keys('alt', 'o')
+    yield 1.5
+    kde = _kde_shortcuts()
+    d.check('vi-1-mute-CTRL+ALT+n' in kde and 'vi-1-mute-CTRL+ALT+m' not in kde, f'KDE has the new one and not the old: {sorted(kde)}')
+    muted = _server_mute(device)
+    _real_keys('ctrl', 'alt', 'm')
+    yield 1.0
+    d.check(_server_mute(device) is muted, 'the old keys do nothing')
+    _real_keys('ctrl', 'alt', 'n')
+    yield 1.0
+    d.check(_server_mute(device) is not muted, 'the new keys work')
+    _real_keys('ctrl', 'alt', 'n')
+    yield 1.0
+
+    # The old keys are free for another device
+    other = repository.get_device('vi', '2')
+    yield from _set_keys(d, window, ('vi', '2', 'mute'), 'ctrl', 'alt', 'm')
+    window.apply_button.emit('clicked')
+    yield 1.5
+    _screen(d, 'kde_dialog_moved_key')
+    _real_keys('alt', 'o')
+    yield 1.5
+    kde = _kde_shortcuts()
+    d.check(kde.get('vi-2-mute-CTRL+ALT+m') == 'Ctrl+Alt+M', f'another device gets those keys: {kde}')
+    muted = _server_mute(other)
+    _real_keys('ctrl', 'alt', 'm')
+    yield 1.0
+    d.check(_server_mute(other) is not muted, 'and they work there')
+    _real_keys('ctrl', 'alt', 'm')
+    yield 1.0
+
+    # Saying no to one, with others already there
+    yield from _set_keys(d, window, ('vi', '2', 'up'), 'ctrl', 'alt', 'i')
+    window.apply_button.emit('clicked')
+    yield 1.5
+    _real_keys('alt', 'c')
+    yield 1.8
+    d.check('up' not in other.hotkeys, 'refused: not set')
+    d.check('vi-2-up-CTRL+ALT+i' not in _kde_shortcuts(), 'KDE keeps nothing of it')
+    d.check(other.hotkeys.get('mute') == 'CTRL+ALT+m', 'the others stay')
+    muted = _server_mute(other)
+    _real_keys('ctrl', 'alt', 'm')
+    yield 1.0
+    d.check(_server_mute(other) is not muted, 'and still work')
+    _real_keys('ctrl', 'alt', 'm')
+    yield 1.0
+
+    # And asked again after that
+    yield from _set_keys(d, window, ('vi', '2', 'up'), 'ctrl', 'alt', 'i')
+    window.apply_button.emit('clicked')
+    yield 1.5
+    d.check(controller.busy, 'asks again')
+    _real_keys('alt', 'o')
+    yield 1.5
+    d.check(other.hotkeys.get('up') == 'CTRL+ALT+i', 'and then it is set')
+
+    # All gone: nothing asked, nothing left at KDE, the keys do nothing
+    for cell in [cell for cell in window.buttons if window.trigger_of(cell)]:
+        window.buttons[cell].emit('clicked')
+        _real_keys('backspace')
+        yield 0.9
+    window.apply_button.emit('clicked')
+    yield 1.5
+    d.check(not controller.busy, 'no question for taking keys away')
+    yield 1.0
+    d.check(_kde_shortcuts() == {}, f'KDE has none left: {_kde_shortcuts()}')
+    muted = _server_mute(device)
+    _real_keys('ctrl', 'alt', 'n')
+    yield 1.0
+    d.check(_server_mute(device) is muted, 'and the keys do nothing')

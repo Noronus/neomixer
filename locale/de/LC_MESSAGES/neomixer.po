@@ -620,6 +620,72 @@ msgstr ""
 msgid "Virtual sources that applications can capture from."
 msgstr ""
 
+msgid "Louder"
+msgstr "Lauter"
+
+msgid "Softer"
+msgstr "Leiser"
+
+msgid "Hotkeys…"
+msgstr "Hotkeys…"
+
+msgid "Hotkeys"
+msgstr "Hotkeys"
+
+msgid "Mute and change the volume of any device with keys, from any program"
+msgstr "Jedes Gerät per Taste stummschalten und lauter oder leiser machen, aus jedem Programm heraus"
+
+msgid "Volume step per press (%)"
+msgstr "Lautstärkeschritt pro Tastendruck (%)"
+
+msgid "Holding a key keeps going, up to 0 dB. Louder than that takes a press each."
+msgstr "Gedrückt halten läuft weiter, bis 0 dB. Lauter geht nur mit einzelnen Tastendrücken."
+
+msgid "Desktop settings"
+msgstr "Desktop-Einstellungen"
+
+msgid "Open your desktop's own settings for these keys"
+msgstr "Die Einstellungen deines Desktops für diese Tasten öffnen"
+
+msgid "Apply"
+msgstr "Übernehmen"
+
+msgid "Click, then press the keys. Esc cancels, Backspace removes the key."
+msgstr "Anklicken, dann die Tasten drücken. Esc bricht ab, die Rücktaste entfernt die Taste."
+
+msgid "Click a field, then press the keys. Esc cancels, Backspace removes the key."
+msgstr "Ein Feld anklicken, dann die Tasten drücken. Esc bricht ab, die Rücktaste entfernt die Taste."
+
+msgid "This desktop gives programs no global keys. Set them up in its own settings, with commands like this one. The last word is mute, up or down."
+msgstr "Dieser Desktop bietet Programmen keine globalen Tasten. Richte sie in seinen eigenen Einstellungen ein, mit Befehlen wie diesem. Das letzte Wort ist mute, up oder down."
+
+msgid "Your desktop has to confirm new keys, look for its window."
+msgstr "Dein Desktop muss neue Tasten bestätigen, achte auf sein Fenster."
+
+msgid "Not applied yet."
+msgstr "Noch nicht übernommen."
+
+msgid "The keys work now, also with the window closed."
+msgstr "Die Tasten funktionieren jetzt, auch bei geschlossenem Fenster."
+
+msgid "Your desktop did not take those keys, so they are not set."
+msgstr "Dein Desktop hat diese Tasten nicht übernommen, sie sind also nicht gesetzt."
+
+msgid "Your desktop could not be asked. The keys stay saved for the next start."
+msgstr "Dein Desktop war nicht erreichbar. Die Tasten bleiben für den nächsten Start gespeichert."
+
+msgid "Press keys…"
+msgstr "Tasten drücken…"
+
+msgid "%s alone would stop working for typing. Add Ctrl, Alt, Shift or Meta."
+msgstr "%s allein ließe sich nicht mehr tippen. Nimm Strg, Alt, Umschalt oder Meta dazu."
+
+msgid "%s is already used for %s: %s"
+msgstr "%s ist schon vergeben an %s: %s"
+
+msgid "In the settings menu, Hotkeys… sets keys to mute any device or change its volume, from any program. Your desktop owns global keys, so it asks you to confirm new ones."
+msgstr "Im Einstellungsmenü legst du unter Hotkeys… Tasten fest, um jedes Gerät aus jedem Programm heraus stummzuschalten oder lauter und leiser zu machen. Globale Tasten gehören deinem Desktop, deshalb fragt er bei neuen nach."
+
 #~ msgid "Create new %s device"
 #~ msgstr "Erzeuge ein neues %s Gerät"
 
@@ -716,8 +782,6 @@ msgstr ""
 #~ msgid "Enable Cleanup"
 #~ msgstr "Bereinigung aktivieren"
 
-#~ msgid "Apply"
-#~ msgstr "Übernehmen"
 
 #~ msgid "Select the GUI layout"
 #~ msgstr "GUI-Layout auswählen"

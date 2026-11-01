@@ -3,6 +3,7 @@ import gettext
 import argparse
 
 from neomixer.settings import VERSION
+from neomixer.utils.hotkeys import ACTIONS
 
 LOG = logging.getLogger('generic')
 _ = gettext.gettext
@@ -86,6 +87,12 @@ def parse_args():
     add_device_args(connect_parser, 'input')
     add_device_args(connect_parser, 'output')
     connect_parser.add_argument('value', type=parse_bool, nargs='?', default=None)
+
+    hotkey_parser = subparser.add_parser(
+        'hotkey', help='Do what a hotkey does in the running instance, for keys set up in your desktop'
+    )
+    add_device_args(hotkey_parser)
+    hotkey_parser.add_argument('action', choices=ACTIONS)
 
     parser.add_argument('-v', '--version', action='version', version=VERSION)
 
