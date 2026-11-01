@@ -17,6 +17,7 @@ LOG = logging.getLogger("generic")
 RECONNECT_SECONDS = 1.0
 # A program that insists on being the default would flip it back and forth with us at full speed
 HOLD_SECONDS = 0.5
+HOLD_CHECKS = 6
 
 
 class EventController(SignalModel):
@@ -80,6 +81,7 @@ class EventController(SignalModel):
         self._pa_index_cache: dict[tuple[str, int], str] = {}
         self._held_at: dict[str, float] = {}
         self._hold_check = None
+        self._hold_checks_left = 0
 
     def _handle_listen_error(self, fut):
         try:
@@ -379,17 +381,21 @@ class EventController(SignalModel):
         self._held_at[device.device_type] = time.monotonic()
         if await pmctl_async.set_primary(device.device_type, device.name, self._pulse):
             LOG.info('The default %s changed to %s, switching back to %s', device.device_type, current_name, device.name)
+            self._hold_checks_left = HOLD_CHECKS
             if self._hold_check is None:
                 self._hold_check = self._async_loop.create_task(self._check_hold())
 
     async def _check_hold(self):
         '''
         Someone writing the default in the same moment undoes that without an event: to the
-        session manager, which only then looks at it, the default did not change.
+        session manager, which only then looks at it, the default did not change. When it gets to
+        that depends on how busy it is, so this goes on for a few seconds after taking it back.
         '''
-        await asyncio.sleep(HOLD_SECONDS)
+        while self._hold_checks_left > 0:
+            self._hold_checks_left -= 1
+            await asyncio.sleep(HOLD_SECONDS)
+            try:
+                await self._hold_defaults()
+            except (pulsectl.PulseError, pulsectl.PulseDisconnected, OSError) as e:
+                LOG.debug('Could not check the held default: %r', e)
         self._hold_check = None
-        try:
-            await self._hold_defaults()
-        except (pulsectl.PulseError, pulsectl.PulseDisconnected, OSError) as e:
-            LOG.debug('Could not check the held default: %r', e)

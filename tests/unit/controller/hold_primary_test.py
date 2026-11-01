@@ -177,6 +177,24 @@ def test_a_write_in_the_same_moment_does_not_win(listener, devices, monkeypatch)
         assert restore.await_count > 1
 
     with _default_is('one'), mock.patch.object(pmctl_async, 'set_primary', mock.AsyncMock(return_value=True)) as restore:
-        time.sleep(0.2)
+        time.sleep(0.5)
         assert restore.await_count == 0
     assert listener._hold_check is None
+
+
+def test_a_change_after_the_first_check_does_not_win_either(listener, devices, monkeypatch):
+    '''When the session manager gets to a write depends on how busy it is, and it leaves no event.'''
+    one, _ = devices
+    one.hold_primary = True
+    monkeypatch.setattr(event_controller, 'HOLD_SECONDS', 0.05)
+    with _default_is('steam'), mock.patch.object(pmctl_async, 'set_primary', mock.AsyncMock(return_value=True)) as restore:
+        _run(listener, listener._handle_server_change_event(None))
+        assert restore.await_count == 1
+
+    with _default_is('one'), mock.patch.object(pmctl_async, 'set_primary', mock.AsyncMock(return_value=True)) as restore:
+        time.sleep(0.08)
+        assert restore.await_count == 0
+
+    with _default_is('steam'), mock.patch.object(pmctl_async, 'set_primary', mock.AsyncMock(return_value=True)) as restore:
+        time.sleep(0.1)
+        assert restore.await_count >= 1
