@@ -1081,3 +1081,82 @@ def live_check(d):
     device.eq.enabled = False
     d.ui._on_eq_window_changed(None, 'a', device_id)
     yield 0.3
+
+
+def output_eq_and_text_then_killed(d):
+    '''Set an EQ on both kinds of output and a text size, and die without a chance to save.'''
+    import os
+    import signal
+
+    _set_band(d, 'a', '1', 9)
+    _set_band(d, 'b', '1', 6)
+    d.ui.settings_menu_open(None)
+    d.content.settings_box.text_size.set_value(11.5)
+    yield 3.5  # past the autosave
+    os.kill(os.getpid(), signal.SIGKILL)
+    yield 1
+
+
+def output_eq_and_text_after_reboot(d):
+    from neomixer.scripts import pw_eq
+    from tests.integration.ui_driver import links
+
+    headset, bus = strip(d, 'a', 'headset'), strip(d, 'b', 'mic1')
+    d.check(d.app.config_model.text_size == 11.5, f'text size survived: {d.app.config_model.text_size}')
+    d.check(d.content.settings_box.text_size.get_value() == 11.5, 'settings show it')
+    d.check(headset.device_model.eq.enabled and headset.device_model.eq.bands[3].gain == 9, 'hardware output EQ settings survived')
+    d.check(bus.device_model.eq.enabled and bus.device_model.eq.bands[3].gain == 6, 'virtual output EQ settings survived')
+    d.check('eq-on' in headset.eq_button.get_css_classes(), 'buttons show it')
+    d.check(bool(pw_eq.running_pids(HEADSET)) and bool(pw_eq.running_pids('mic1')), 'both are running')
+
+    linked = links()
+    d.check(f'output.nm_eq_{HEADSET}:output_FL\n  |-> {HEADSET}:playback_FL' in linked, 'hardware EQ is linked to its device')
+    d.check('output.nm_eq_mic1:output_MONO\n  |-> mic1:input_MONO' in linked, 'virtual EQ too')
+
+    strip(d, 'vi', 'in discord').volume_widget.set_value(100)
+    yield 0.2
+    routed = _measure_at_device(HEADSET, ['--target', 'indiscord'])
+    d.check(routed is not None and abs(routed - 9) < 0.7, f'and it sounds like it: {routed}')
+    direct = _measure_at_device(HEADSET, ['--target', HEADSET])
+    d.check(direct is not None and direct > routed - 3 and direct > -60, f'programs go through it too: {direct}')
+
+    # back to neutral for what runs next
+    for key in (('a', '1'), ('b', '1')):
+        d.ui.open_eq_window(None, *key)
+        window = d.ui.eq_windows[key]
+        window.eq.reset()
+        window.eq.enabled = False
+        window._edited()
+    d.content.settings_box.text_size.set_value(9)
+    yield 0.4
+
+
+def eq_starts_when_its_output_arrives(d):
+    '''After a reboot sound cards can show up after the app: the EQ has to wait for them.'''
+    import subprocess
+    from neomixer.scripts import pw_eq
+    from tests.integration.ui_driver import create_null_sink, links
+
+    blue = 'bluez_output.80_99_E7_ED_23_2C.1'
+    subprocess.run(['pw-cli', 'destroy', blue], check=False, stdout=subprocess.DEVNULL)
+    yield 0.6
+    strip_widget = strip(d, 'a', 'blue')
+    strip_widget.device_model.eq.enabled = True
+    strip_widget.device_model.eq.bands[3].freq = 1000
+    strip_widget.device_model.eq.bands[3].gain = 9
+    d.ui._on_eq_window_changed(None, 'a', '4')
+    yield 0.5
+    d.check(not pw_eq.running_pids(blue), 'no EQ without its device')
+
+    strip(d, 'vi', 'in discord').volume_widget.set_value(100)
+    create_null_sink(blue)
+    yield 1.5
+    d.check(bool(pw_eq.running_pids(blue)), 'it starts when the device arrives')
+    d.check(f'output.nm_eq_{blue}:output_FL\n  |-> {blue}:playback_FL' in links(), 'and gets linked to it')
+    routed = _measure_at_device(blue, ['--target', 'indiscord'])
+    d.check(routed is not None and abs(routed - 9) < 0.7, f'routes go through it: {routed}')
+
+    strip_widget.device_model.eq.reset()
+    strip_widget.device_model.eq.enabled = False
+    d.ui._on_eq_window_changed(None, 'a', '4')
+    yield 0.3
