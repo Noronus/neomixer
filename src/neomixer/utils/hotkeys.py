@@ -15,8 +15,11 @@ ACTIONS = ('mute', 'up', 'down')
 # In the order they are written
 MODIFIER_LABELS = {'LOGO': 'Meta', 'CTRL': 'Ctrl', 'ALT': 'Alt', 'SHIFT': 'Shift'}
 
-# Any other key alone would stop working for typing and moving around, everywhere
-WORKS_ALONE = re.compile(r'^(F\d+|XF86\w+|KP_\w+|Pause|Scroll_Lock|Print|Menu)$')
+# Keys that no program needs, taking them alone costs nothing
+SPARE_KEYS = re.compile(r'^(XF86\w+|F(1[3-9]|[2-9]\d)|Pause|Scroll_Lock)$')
+
+# The range of keyvals that GDK leaves the XF86 out of
+XF86_KEYS = (0x10080000, 0x1008ffff)
 
 KEY_LABELS = {'Page_Up': 'PgUp', 'Page_Down': 'PgDown', 'Prior': 'PgUp', 'Next': 'PgDown', 'Return': 'Enter', 'space': 'Space'}
 
@@ -37,10 +40,19 @@ def parse_shortcut_id(shortcut):
     return tuple(parts)
 
 
+def key_name(keyval):
+    '''
+    The name of a key for the desktop. GDK leaves out the XF86 of multimedia keys, that is in the
+    name of the key everywhere else.
+    '''
+    name = Gdk.keyval_name(keyval)
+    return f'XF86{name}' if XF86_KEYS[0] <= keyval <= XF86_KEYS[1] and not name.startswith('XF86') else name
+
+
 def make_trigger(modifiers, key):
     '''
         "modifiers" are names from MODIFIER_LABELS
-        "key" is the name of a key, as in Gdk.keyval_name
+        "key" is the name of a key, see key_name
     '''
     return '+'.join([name for name in MODIFIER_LABELS if name in modifiers] + [key])
 
@@ -62,5 +74,10 @@ def trigger_label(trigger):
 
 
 def works_alone(key):
-    '''Can this key be a hotkey without a modifier?'''
-    return WORKS_ALONE.match(key) is not None
+    '''Can this key be a hotkey without a modifier? Not one that types: nothing could be typed with it any more.'''
+    return key.startswith('KP_') or Gdk.keyval_to_unicode(Gdk.keyval_from_name(key)) == 0
+
+
+def is_spare(key):
+    '''Does a hotkey on this key alone take nothing away from other programs?'''
+    return SPARE_KEYS.match(key) is not None

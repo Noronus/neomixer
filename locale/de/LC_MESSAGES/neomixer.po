@@ -665,6 +665,9 @@ msgstr "Dein Desktop muss neue Tasten bestätigen, achte auf sein Fenster."
 msgid "Not applied yet."
 msgstr "Noch nicht übernommen."
 
+msgid "Not applied yet. %s will do only this, in every program."
+msgstr "Noch nicht übernommen. %s macht dann nur noch das, in allen Programmen."
+
 msgid "The keys work now, also with the window closed."
 msgstr "Die Tasten funktionieren jetzt, auch bei geschlossenem Fenster."
 

@@ -1753,6 +1753,19 @@ def hotkeys_work(d):
     d.check('already used' in window.status.get_label(), f'and it says why: {window.status.get_label()}')
     window.on_key_pressed(None, *_key(Gdk.KEY_F13, ctrl=False, alt=False))
     d.check(window.edits[('vi', '2', 'mute')] == 'F13', 'a key that types nothing works alone')
+    window.buttons[('vi', '3', 'mute')].emit('clicked')
+    window.on_key_pressed(None, *_key(Gdk.KEY_AudioMute, ctrl=False, alt=False))
+    d.check(window.edits.get(('vi', '3', 'mute')) == 'XF86AudioMute', f'a media key too: {window.edits}')
+    d.check(window.buttons[('vi', '3', 'mute')].get_label() == 'AudioMute', window.buttons[('vi', '3', 'mute')].get_label())
+    d.check('every program' not in window.status.get_label(), 'it takes nothing from other programs')
+    window.buttons[('vi', '3', 'mute')].emit('clicked')
+    window.on_key_pressed(None, *_key(Gdk.KEY_Home, ctrl=False, alt=False))
+    d.check(window.edits.get(('vi', '3', 'mute')) == 'Home', f'home is taken, it types nothing: {window.edits}')
+    d.check('every program' in window.status.get_label(), f'what that costs is said: {window.status.get_label()}')
+    window.buttons[('vi', '3', 'mute')].emit('clicked')
+    window.on_key_pressed(None, *_key(Gdk.KEY_BackSpace, ctrl=False, alt=False))
+    d.check(('vi', '3', 'mute') not in window.edits, 'and taken back')
+    d.check('every program' not in window.status.get_label(), 'and the note goes')
 
     # One of each kind of device
     cells = {
@@ -2164,11 +2177,15 @@ def kde_hotkeys_set(d):
         (('a', '1', 'up'), ('meta', 'y')),
         (('hi', '1', 'mute'), ('ctrl', 'alt', 'j')),
         (('b', '1', 'mute'), ('ctrl', 'alt', 'k')),
+        (('a', '2', 'mute'), ('mutekey',)),
+        (('a', '4', 'mute'), ('home',)),
     ):
         yield from _set_keys(d, window, cell, *keys)
     d.check(window.edits[('vi', '1', 'down')] == 'CTRL+exclam', f'a symbol, the only way KDE fires on it: {window.edits[("vi", "1", "down")]}')
     d.check(window.buttons[('vi', '1', 'down')].get_label() == 'Ctrl+!', window.buttons[('vi', '1', 'down')].get_label())
     d.check(window.edits[('a', '1', 'mute')] == 'F9', 'f9 works alone')
+    d.check(window.edits[('a', '2', 'mute')] == 'XF86AudioMute', f'a media key: {window.edits[("a", "2", "mute")]}')
+    d.check(window.edits[('a', '4', 'mute')] == 'Home', f'home: {window.edits[("a", "4", "mute")]}')
     d.check(window.edits[('a', '1', 'up')] == 'LOGO+y', f'with meta: {window.edits[("a", "1", "up")]}')
     d.shot('kde_edited', window)
 
@@ -2181,7 +2198,7 @@ def kde_hotkeys_set(d):
     d.check(not controller.busy, 'confirmed')
     d.check('work now' in window.status.get_label(), window.status.get_label())
     kde = _kde_shortcuts()
-    d.check(len(kde) == 7, f'KDE has them: {kde}')
+    d.check(len(kde) == 9, f'KDE has them: {kde}')
     d.check(kde.get('vi-1-mute-CTRL+ALT+m') == 'Ctrl+Alt+M', 'with their keys')
     d.check(all(controller.bound.values()), f'and says which: {controller.bound}')
     yield 0.2
@@ -2191,15 +2208,18 @@ def kde_hotkeys_set(d):
     window.close()
     d.ui.hide_window()
     yield 0.5
-    for device_type, keys in (('vi', ('ctrl', 'alt', 'm')), ('a', ('f9',)), ('hi', ('ctrl', 'alt', 'j')), ('b', ('ctrl', 'alt', 'k'))):
-        device = repository.get_device(device_type, '1')
+    for device_type, device_id, keys in (
+        ('vi', '1', ('ctrl', 'alt', 'm')), ('a', '1', ('f9',)), ('hi', '1', ('ctrl', 'alt', 'j')), ('b', '1', ('ctrl', 'alt', 'k')),
+        ('a', '2', ('mutekey',)), ('a', '4', ('home',)),
+    ):
+        device = repository.get_device(device_type, device_id)
         muted = _server_mute(device)
         _real_keys(*keys)
         yield 0.9
-        d.check(_server_mute(device) is not muted, f'{device_type}: mute with real keys')
+        d.check(_server_mute(device) is not muted, f'{device_type} {device_id}: mute with {keys}')
         _real_keys(*keys)
         yield 0.9
-        d.check(_server_mute(device) is muted, f'{device_type}: and back')
+        d.check(_server_mute(device) is muted, f'{device_type} {device_id}: and back')
 
     device = repository.get_device('vi', '1')
     fader = d.content.device_box['vi'].widgets['1'].volume_widget
@@ -2242,7 +2262,7 @@ def kde_hotkeys_after_reboot(d):
     controller = d.app.hotkey_controller
     repository = d.app.device_repository
     d.check(not controller.busy, 'no question at the start')
-    d.check(len(controller.bound) == 7 and all(controller.bound.values()), f'all are there: {controller.bound}')
+    d.check(len(controller.bound) == 9 and all(controller.bound.values()), f'all are there: {controller.bound}')
     device = repository.get_device('vi', '1')
     muted = _server_mute(device)
     _real_keys('ctrl', 'alt', 'm')

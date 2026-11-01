@@ -4,7 +4,7 @@ from neomixer.controller.hotkey_controller import (
     ACTION_LABELS, NOTICE_APPLIED, NOTICE_CANCELLED, NOTICE_FAILED
 )
 from neomixer.model.types import DEVICE_TYPE_SHORT
-from neomixer.utils.hotkeys import ACTIONS, make_trigger, shortcut_id, trigger_label, works_alone
+from neomixer.utils.hotkeys import ACTIONS, is_spare, key_name, make_trigger, shortcut_id, trigger_label, works_alone
 
 # pylint: disable=wrong-import-order,wrong-import-position
 import gi
@@ -17,7 +17,12 @@ _ = gettext.gettext
 NO_KEY = '—'
 MIN_STEP = 1
 MAX_STEP = 25
-MAX_LIST_HEIGHT = 640
+# Roughly, so that all fits at the text sizes people use. Past that it scrolls.
+WINDOW_WIDTH = 780
+HEIGHT_AROUND_LIST = 190
+HEIGHT_PER_DEVICE = 40
+HEIGHT_PER_SECTION = 44
+MAX_WINDOW_HEIGHT = 900
 
 MODIFIER_KEYS = {
     'Shift_L', 'Shift_R', 'Control_L', 'Control_R', 'Alt_L', 'Alt_R', 'Meta_L', 'Meta_R', 'Super_L', 'Super_R',
@@ -61,7 +66,7 @@ class HotkeyWindow(Gtk.Window):
     }
 
     def __init__(self, step, **kwargs):
-        super().__init__(title=_('Hotkeys'), default_width=760, **kwargs)
+        super().__init__(title=_('Hotkeys'), default_width=WINDOW_WIDTH, **kwargs)
         self.add_css_class('neomixer')
         self.devices = []
         self.saved = {}  # (device_type, device_id, action): keys
@@ -70,14 +75,14 @@ class HotkeyWindow(Gtk.Window):
         self.capturing = None
         self.state = None
         self.problem = None
+        self.note = None
 
         self.intro = Gtk.Label(xalign=0, wrap=True)
         self.intro.add_css_class('hotkey-hint')
         self.command = Gtk.Label(xalign=0, selectable=True, focusable=False, visible=False)
-        self.grid = Gtk.Grid(column_spacing=8, row_spacing=4)
-        # As tall as it takes, until it would not fit on a screen
-        scrolled = Gtk.ScrolledWindow(hexpand=True, vexpand=True, child=self.grid, propagate_natural_height=True,
-                                      max_content_height=MAX_LIST_HEIGHT)
+        # The margin keeps the last column out from under the scrollbar
+        self.grid = Gtk.Grid(column_spacing=8, row_spacing=4, margin_end=14)
+        scrolled = Gtk.ScrolledWindow(hexpand=True, vexpand=True, child=self.grid)
         scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
 
         self.step = Gtk.SpinButton.new_with_range(MIN_STEP, MAX_STEP, 1)
@@ -135,6 +140,10 @@ class HotkeyWindow(Gtk.Window):
             self.capturing = None
         if rows_changed:
             self._build_grid()
+        if not self.get_mapped():
+            sections = len({device_type for device_type, *_ in devices})
+            height = HEIGHT_AROUND_LIST + HEIGHT_PER_DEVICE * len(devices) + HEIGHT_PER_SECTION * sections
+            self.set_default_size(WINDOW_WIDTH, min(height, MAX_WINDOW_HEIGHT))
         self._refresh_buttons()
         self._show_status()
 
@@ -245,7 +254,7 @@ class HotkeyWindow(Gtk.Window):
         if self.state.busy:
             return _('Your desktop has to confirm new keys, look for its window.'), None
         if self.edits:
-            return _('Not applied yet.'), None
+            return self.note or _('Not applied yet.'), None
         notices = {
             NOTICE_APPLIED: (_('The keys work now, also with the window closed.'), 'hotkey-status-good'),
             NOTICE_CANCELLED: (_('Your desktop did not take those keys, so they are not set.'), 'hotkey-status-problem'),
@@ -255,6 +264,7 @@ class HotkeyWindow(Gtk.Window):
 
     def on_key_button_clicked(self, _, key):
         self.problem = None
+        self.note = None
         self.capturing = None if self.capturing == key else key
         self._refresh_buttons()
         self._show_status()
@@ -276,7 +286,7 @@ class HotkeyWindow(Gtk.Window):
             # A symbol stands for shift already: KDE only knows Ctrl+! and never fires on Ctrl+Shift+1
             if is_symbol(keyval) and 'SHIFT' in modifiers:
                 modifiers.remove('SHIFT')
-            self._take_key(modifiers, Gdk.keyval_name(Gdk.keyval_to_lower(keyval)))
+            self._take_key(modifiers, key_name(Gdk.keyval_to_lower(keyval)))
         return True
 
     def _take_key(self, modifiers, key):
@@ -295,6 +305,9 @@ class HotkeyWindow(Gtk.Window):
                     return
 
         self._set_trigger(trigger)
+        if not modifiers and not is_spare(key):
+            self.note = _('Not applied yet. %s will do only this, in every program.') % trigger_label(trigger)
+            self._show_status()
 
     def _set_trigger(self, trigger):
         key = self.capturing
@@ -313,6 +326,7 @@ class HotkeyWindow(Gtk.Window):
     def apply(self):
         edits, self.edits = self.edits, {}
         self.problem = None
+        self.note = None
         self.capturing = None
         if edits:
             self.emit('apply', edits)

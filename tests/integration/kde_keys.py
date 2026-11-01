@@ -24,7 +24,7 @@ FUNCTIONS = {f'f{i + 1}': 59 + i for i in range(10)} | {'f11': 87, 'f12': 88}
 FUNCTIONS |= {f'f{i + 13}': 183 + i for i in range(12)}
 NAMED = {
     'esc': 1, 'backspace': 14, 'tab': 15, 'enter': 28, 'ctrl': 29, 'shift': 42, 'alt': 56, 'space': 57,
-    'meta': 125, 'left': 105, 'right': 106, 'up': 103, 'down': 108,
+    'meta': 125, 'left': 105, 'right': 106, 'up': 103, 'down': 108, 'home': 102, 'mutekey': 113,
 }
 KEYS = LETTERS | DIGITS | FUNCTIONS | NAMED
 BUTTON_LEFT = 0x110
