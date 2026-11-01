@@ -5,7 +5,8 @@
 #
 #   sandbox.sh start [dir]   start it, default dir is $NEOMIXER_SANDBOX or ./.sandbox
 #   sandbox.sh stop  [dir]   stop it and delete its runtime dir
-#   sandbox.sh audio-restart [dir]   restart the audio daemons only, like a reboot would
+#   sandbox.sh audio-restart [dir]   restart the audio daemons, as a package update can do
+#   sandbox.sh reboot [dir]  what a reboot does to the audio side
 #   source <dir>/env         run commands inside it
 set -u
 cmd=${1:-start}
@@ -48,6 +49,10 @@ wireplumber.profiles = {
   }
 }
 CONF
+    # A tone source stands in for a microphone in the tests: it only runs when something pulls
+    mkdir -p "$SB/config/pipewire/pipewire.conf.d"
+    echo 'context.spa-libs = { audiotestsrc = audiotestsrc/libspa-audiotestsrc }' \
+        >"$SB/config/pipewire/pipewire.conf.d/90-sandbox.conf"
     dbus_addr=$(dbus-daemon --session --fork --print-address=1 --print-pid=3 3>"$SB/pid/dbus" | head -1)
     cat >"$SB/env" <<ENV
 export NEOMIXER_SANDBOX="$SB"
@@ -78,6 +83,17 @@ audio-restart)
     stop_audio
     start_audio
     ;;
+reboot)
+    # What a reboot does to NeoMixer: its EQ processes and everything in the graph are gone
+    for proc in /proc/[0-9]*; do
+        if tr '\0' ' ' <"$proc/cmdline" 2>/dev/null | grep -qF "$SB/run/neomixer/eq-"; then
+            kill "${proc#/proc/}" 2>/dev/null
+        fi
+    done
+    stop_audio
+    rm -rf "$SB/run/neomixer"
+    start_audio
+    ;;
 stop)
     stop_audio
     for name in kwin dbus; do
@@ -87,7 +103,7 @@ stop)
     rm -rf "$SB/run"
     ;;
 *)
-    echo "usage: $0 start|stop|audio-restart [dir]" >&2
+    echo "usage: $0 start|stop|audio-restart|reboot [dir]" >&2
     exit 2
     ;;
 esac

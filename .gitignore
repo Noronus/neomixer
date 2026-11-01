@@ -266,3 +266,4 @@ cython_debug/
 
 # NeoMixer
 .sandbox/
+.sandbox-test/
