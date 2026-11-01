@@ -25,6 +25,14 @@ start_audio() {
       echo "pipewire-pulse did not come up" >&2; exit 1 )
 }
 
+stop_eqs() {
+    for proc in /proc/[0-9]*; do
+        if tr '\0' ' ' <"$proc/cmdline" 2>/dev/null | grep -qF "$SB/run/neomixer/eq-"; then
+            kill "${proc#/proc/}" 2>/dev/null
+        fi
+    done
+}
+
 stop_audio() {
     for name in wireplumber pipewire-pulse pipewire; do
         [ -f "$SB/pid/$name" ] && kill "$(cat "$SB/pid/$name")" 2>/dev/null
@@ -102,16 +110,14 @@ audio-restart)
     ;;
 reboot)
     # What a reboot does to NeoMixer: its EQ processes and everything in the graph are gone
-    for proc in /proc/[0-9]*; do
-        if tr '\0' ' ' <"$proc/cmdline" 2>/dev/null | grep -qF "$SB/run/neomixer/eq-"; then
-            kill "${proc#/proc/}" 2>/dev/null
-        fi
-    done
+    stop_eqs
     stop_audio
     rm -rf "$SB/run/neomixer"
     start_audio
     ;;
 stop)
+    # They outlive the app on purpose, so nothing else ends them
+    stop_eqs
     stop_audio
     for name in kwin dbus; do
         [ -f "$SB/pid/$name" ] && kill "$(cat "$SB/pid/$name")" 2>/dev/null

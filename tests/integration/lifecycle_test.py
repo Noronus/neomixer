@@ -14,7 +14,8 @@ import sys
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SANDBOX = os.path.join(ROOT, '.sandbox-test')
+# One per run: a second session in the same checkout must not stop this one's sandbox
+SANDBOX = os.path.join(ROOT, f'.sandbox-test-{os.getpid()}')
 SCRIPT = os.path.join(ROOT, 'tests', 'integration', 'sandbox.sh')
 DRIVER = os.path.join(ROOT, 'tests', 'integration', 'ui_driver.py')
 PYTHON = sys.executable
@@ -98,6 +99,31 @@ SCENARIOS = (
 )
 
 
+def document_portal_mount():
+    '''
+    The desktop's Flatpak document portal mount, with its mount id. A sandbox that starts a
+    portal of its own takes this over, and no Flatpak app starts anymore once that one exits.
+    '''
+    target = os.path.join(os.environ.get('XDG_RUNTIME_DIR', ''), 'doc')
+    with open('/proc/self/mountinfo', encoding='utf-8') as mounts:
+        return next((line.split()[0] for line in mounts if line.split()[4] == target), None)
+
+
+def processes_of_the_sandbox(env):
+    '''Whatever still runs with the sandbox's bus or directories in its environment.'''
+    markers = (env['DBUS_SESSION_BUS_ADDRESS'].encode(), SANDBOX.encode())
+    found = []
+    for pid in filter(str.isdigit, os.listdir('/proc')):
+        try:
+            with open(f'/proc/{pid}/environ', 'rb') as environ:
+                if any(marker in environ.read() for marker in markers):
+                    with open(f'/proc/{pid}/comm', encoding='utf-8') as comm:
+                        found.append(f'{comm.read().strip()} ({pid})')
+        except OSError:
+            continue
+    return found
+
+
 def sandbox_env():
     env = dict(os.environ)
     env['PYTHONPATH'] = os.pathsep.join((os.path.join(ROOT, 'src'), ROOT))
@@ -122,9 +148,8 @@ def fake_hardware(env):
 
 
 def main():
-    shots = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.path.join(SANDBOX, 'shots')
-    subprocess.run([SCRIPT, 'stop', SANDBOX], check=False, capture_output=True)
-    shutil.rmtree(SANDBOX, ignore_errors=True)
+    shots = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.path.join(ROOT, '.sandbox-shots')
+    portal_before = document_portal_mount()
     subprocess.run([SCRIPT, 'start', SANDBOX], check=True)
     env = sandbox_env()
     results = []
@@ -157,6 +182,17 @@ def main():
             print(f'--> {"pass" if passed else f"FAILED (exit {run.returncode})"} in {time.monotonic() - started:.1f}s', flush=True)
     finally:
         subprocess.run([SCRIPT, 'stop', SANDBOX], check=False, capture_output=True)
+
+    # The sandbox has to be gone without a trace, the desktop next to it untouched
+    time.sleep(1)
+    leftovers = processes_of_the_sandbox(env)
+    print(f'=== leftovers of the sandbox: {leftovers or "none"}')
+    results.append(('no process outlives the sandbox', not leftovers))
+    portal_after = document_portal_mount()
+    print(f'=== document portal mount: {portal_before} before, {portal_after} after')
+    results.append(("the desktop's document portal is untouched", portal_before == portal_after))
+    if not leftovers:
+        shutil.rmtree(SANDBOX, ignore_errors=True)
 
     print()
     failed = [name for name, passed in results if not passed]
