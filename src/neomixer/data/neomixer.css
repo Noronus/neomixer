@@ -115,7 +115,7 @@ scale.fader.vertical marks indicator { min-width: 5px; min-height: 1px; }
 
 /* Strip buttons */
 button.strip-button, menubutton.strip-button > button {
-    min-height: 22px; min-width: 0; padding: 0 4px; margin: 0;
+    min-height: 22px; min-width: 0; padding: 0 2px; margin: 0;
     background-image: none; background-color: #0f1319;
     border: 1px solid @nm_line; border-radius: 5px; box-shadow: none;
     color: @nm_dim; font-size: 0.78em; font-weight: 800;
@@ -123,6 +123,8 @@ button.strip-button, menubutton.strip-button > button {
 button.strip-button:hover { background-color: #1a202b; color: @nm_text; }
 button.mute:checked { background-color: @nm_mute; border-color: @nm_mute; color: #fff; }
 button.primary:checked { background-color: @nm_text; border-color: @nm_text; color: @nm_bg; }
+button.hold { padding: 0; -gtk-icon-size: 12px; }
+button.hold:checked { background-color: @nm_a; border-color: @nm_a; color: @nm_bg; }
 button.eq-button.eq-on { background-color: @nm_eq; border-color: @nm_eq; color: #1a1305; }
 button.eq-button.eq-on:hover { background-color: #fcd34d; color: #1a1305; }
 button.eq-button.eq-curved { color: @nm_eq; border-color: @nm_eq; }

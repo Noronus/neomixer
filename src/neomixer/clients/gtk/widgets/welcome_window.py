@@ -56,7 +56,8 @@ GUIDE_SECTIONS = [
     (
         _('Primary device'),
         _('Marking a device as primary (★) makes it the default that new applications attach '
-          'to automatically. This sets the primary in PipeWire itself.')
+          'to automatically. This sets the primary in PipeWire itself. The lock next to it keeps '
+          'it the default: if another program changes the default device, it switches back.')
     ),
 ]
 

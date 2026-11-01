@@ -42,6 +42,7 @@ class ConfigModel(BaseModel):
         cls._drop_invalid_devices(devices)
         cls._repair_volumes(devices)
         cls._dedupe_primary(devices)
+        cls._repair_hold_primary(devices)
         cls._repair_connections(devices)
         for app_type in APP_TYPES:
             values['apps'].setdefault(app_type, {})
@@ -72,6 +73,16 @@ class ConfigModel(BaseModel):
                     device.primary = False
                 else:
                     seen_primary = True
+
+    @classmethod
+    def _repair_hold_primary(cls, devices):
+        '''A held device is the primary one, and there is one at most.'''
+        for device_type in VIRTUAL_TYPES:
+            held = next((device for device in devices[device_type].values() if device.hold_primary), None)
+            if held is None:
+                continue
+            for device in devices[device_type].values():
+                device.primary = device.hold_primary = device is held
 
     @classmethod
     def _repair_connections(cls, devices):

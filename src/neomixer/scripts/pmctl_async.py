@@ -75,6 +75,21 @@ async def get_primary(device_type: str, pulse):
         return None
 
 
+async def set_primary(device_type: str, device_name: str, pulse) -> bool:
+    '''Make a device the default, False if it is not there.'''
+    try:
+        if device_type == 'sink':
+            device = await pulse.get_sink_by_name(device_name)
+        else:
+            device = await pulse.get_source_by_name(device_name)
+    except pulsectl.PulseIndexError:
+        LOG.debug('No %s %s to make the default', device_type, device_name)
+        return False
+
+    await pulse.default_set(device)
+    return True
+
+
 async def subscribe_peak(name, device_type, callback, stream_index=None, rate=20):
     '''
     Feed peaks of a device, or of one playback stream (by index) on a sink, to `callback`.

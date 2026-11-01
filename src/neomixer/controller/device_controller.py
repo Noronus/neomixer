@@ -357,9 +357,31 @@ class DeviceController(SignalModel):
         if device.primary is True:
             return
 
+        # Holding is about what the mixer says, and now it says this one
+        held = any(other.hold_primary for other in self.device_repository.get_devices_by_type(device_type).values())
         self.unset_primary(device_type)
 
         device.set_primary(True, emit=False)
+        device.hold_primary = held
+        pmctl.set_primary(device.device_type, device.name)
+
+    def set_hold_primary(self, device_type, device_id, state):
+        '''
+        Keep a device the default: when something else changes the default, it switches back.
+        Args:
+            device_type (str): Type of device.
+            device_id (str): Device identifier.
+            state (bool): Whether to hold it.
+        '''
+        device = self.device_repository.get_device(device_type, device_id)
+        if not state:
+            device.hold_primary = False
+            return
+
+        # In this order: the listener must not take the default back to the device held before
+        self.unset_primary(device_type)
+        device.set_primary(True, emit=False)
+        device.hold_primary = True
         pmctl.set_primary(device.device_type, device.name)
 
     def unset_primary(self, device_type):
@@ -369,6 +391,7 @@ class DeviceController(SignalModel):
             device_type (str): Type of device.
         '''
         for _, device in self.device_repository.get_devices_by_type(device_type).items():
+            device.hold_primary = False
             device.set_primary(False, emit=False)
 
     def set_connection(self, input_type, input_id, output_type, output_id, state: bool = None, soft=False):

@@ -4,7 +4,7 @@ from neomixer.model.device_model import DeviceModel
 
 from neomixer.clients.gtk.widgets.common.volume_widget import VolumeWidget, format_db
 from neomixer.clients.gtk.widgets.common.mute_widget import MuteWidget
-from neomixer.clients.gtk.widgets.common.default_widget import DefaultWidget
+from neomixer.clients.gtk.widgets.common.default_widget import DefaultWidget, HoldWidget
 from neomixer.clients.gtk.widgets.common.vumeter_widget import VumeterWidget
 from neomixer.clients.gtk.widgets.utils.widget_box import WidgetBox
 from neomixer.clients.gtk.widgets.device.connection_widget import ConnectionWidget
@@ -30,6 +30,7 @@ class DeviceWidget(Gtk.Box):
     __gsignals__ = {
         'mute': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (bool,)),
         'primary': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
+        'hold_primary': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (bool,)),
         'volume': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (int,)),
         'device_remove': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
         'device_change': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_PYOBJECT,)),
@@ -88,6 +89,7 @@ class DeviceWidget(Gtk.Box):
         self.edit_button.set_popover(self.popover)
 
         self.primary_widget = DefaultWidget(active=bool(model.primary), hexpand=True)
+        self.hold_widget = HoldWidget(active=model.hold_primary, hexpand=True)
 
         self.eq_button = Gtk.Button(label=_('EQ'), hexpand=True)
         self.eq_button.add_css_class('strip-button')
@@ -138,11 +140,13 @@ class DeviceWidget(Gtk.Box):
         self.append(fader_row)
         self.append(self.value_label)
 
-        buttons = Gtk.Box(spacing=3, homogeneous=True, margin_top=4)
+        # Not homogeneous: the widest of four buttons would decide how narrow a strip can get
+        buttons = Gtk.Box(spacing=3, margin_top=4)
         buttons.append(self.mute_widget)
         buttons.append(self.eq_button)
         if self.device_model.primary is not None:
             buttons.append(self.primary_widget)
+            buttons.append(self.hold_widget)
         self.append(buttons)
 
         # Same height on every strip, inputs fill it with routes: all faders line up
@@ -265,6 +269,7 @@ class DeviceWidget(Gtk.Box):
         self.volume_widget.connect('volume', self._on_volume_change)
         self.mute_widget.connect('mute', self._on_mute_change)
         self.primary_widget.connect('primary', self._on_primary_change)
+        self.hold_widget.connect('hold', self._on_hold_change)
         self.popover.confirm_button.connect('clicked', self._on_settings_save)
         self.popover.remove_button.connect('clicked', self._on_device_remove)
         self.eq_button.connect('clicked', self._on_eq_pressed)
@@ -299,6 +304,9 @@ class DeviceWidget(Gtk.Box):
 
     def _on_primary_change(self, _):
         self.emit('primary')
+
+    def _on_hold_change(self, _, state):
+        self.emit('hold_primary', state)
 
     def _on_eq_pressed(self, _):
         self.emit('eq_pressed')

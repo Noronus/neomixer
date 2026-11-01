@@ -103,6 +103,24 @@ def test_dedupes_primary_within_type():
     assert primaries.count(True) == 1
 
 
+def test_only_one_device_is_held_and_it_is_the_primary():
+    a = _input_device(name='a', primary=True)
+    b = _input_device(name='b')
+    b.hold_primary = True
+    c = _input_device(name='c')
+    c.hold_primary = True
+    config = ConfigModel(devices={'vi': {'1': a, '2': b, '3': c}, 'hi': {}, 'a': {}, 'b': {}})
+    devices = config.devices['vi']
+    assert [d.hold_primary for d in devices.values()] == [False, True, False]
+    assert [d.primary for d in devices.values()] == [False, True, False]
+
+
+def test_old_configs_hold_nothing():
+    config = ConfigModel(devices={'vi': {'1': _input_device(name='a', primary=True)}, 'hi': {}, 'a': {}, 'b': {}})
+    assert config.devices['vi']['1'].primary is True
+    assert config.devices['vi']['1'].hold_primary is False
+
+
 def test_drops_orphan_connection_to_missing_output():
     inp = _input_device()
     inp.connections = {'a': {}, 'b': {'99': _connection(nick='ghost')}}

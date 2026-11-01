@@ -25,6 +25,7 @@ class DeviceModel(BaseModel):
     flags: int = 0
     external: bool = False
     primary: bool | None
+    hold_primary: bool = False  # switch back to it when something else changes the default
     channels: int
     channel_list: list[str]
     connections: dict[str, dict[str, ConnectionModel]] = {'a': {}, 'b': {}}

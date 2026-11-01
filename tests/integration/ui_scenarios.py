@@ -3,6 +3,8 @@ Scripted runs of the real app, see ui_driver.py.
 '''
 
 HEADSET = 'alsa_output.test_headset.analog-stereo'
+FRAME = 'vrlink-sink'
+MIC_NAME = 'alsa_input.test_headset.mono-fallback'
 
 
 def first_look(d):
@@ -11,6 +13,33 @@ def first_look(d):
     d.play('Cyberpunk 2077', binary='Cyberpunk2077.exe', freq=500)
     yield 1.5
     d.shot('first_look')
+
+
+def first_run(d):
+    '''Someone new: no config, nothing to import, an empty mixer and the welcome window.'''
+    import subprocess
+    yield 1.0
+    d.check(d.app.config_persistence.first_run, 'knows it is the first run')
+    d.check(d.ui.welcome_window is not None, 'says hello')
+    d.check(not any(d.content.device_box[kind].widgets for kind in ('vi', 'hi', 'a', 'b')), 'starts empty')
+    d.shot('first_run')
+    d.shot('first_run_welcome', d.ui.welcome_window)
+    d.ui.welcome_window.close()
+
+    popover = d.content.create_device_button['vi'].get_popover()
+    popover.nick_widget.set_option('first')
+    popover.name_widget.set_option('firstinput')
+    popover.combobox_widget.set_active_name('Stereo')
+    d.content._on_device_create(None, popover)
+    yield 0.8
+    sinks = subprocess.check_output(['pactl', 'list', 'short', 'sinks'], text=True)
+    d.check('firstinput' in sinks, 'the first virtual input appears in the sound server')
+    d.shot('first_run_device')
+
+    # Back out of the way of the rest of the suite
+    d.ui.device_remove(strip(d, 'vi', 'first'), 'vi', next(iter(d.content.device_box['vi'].widgets)))
+    yield 0.5
+    d.check('firstinput' not in subprocess.check_output(['pactl', 'list', 'short', 'sinks'], text=True), 'and is gone again')
 
 
 def demo_screenshot(d):
@@ -460,6 +489,204 @@ def close_keeps_running(d):
     d.ui.toggle_window()
     yield 0.3
     d.check(window.get_visible() is True, 'and show it')
+
+
+def _default(kind):
+    import subprocess
+    return subprocess.check_output(['pactl', f'get-default-{kind}'], text=True).strip()
+
+
+def _take_default(kind, name):
+    '''Change the default device from outside, what Steam writes when the Frame connects.'''
+    import subprocess
+    subprocess.run(['pw-metadata', '-n', 'default', '0', f'default.configured.audio.{kind}', f'{{ "name": "{name}" }}', 'Spa:String:JSON'],
+                   stdout=subprocess.DEVNULL, check=True)
+
+
+def default_is_held(d):
+    '''Whatever changes the default device loses it again, while the mixer's own choice wins.'''
+    import subprocess
+    import time
+    from neomixer.scripts import pmctl_async
+    from tests.integration.ui_driver import create_null_sink, stream_device
+
+    in1, media = strip(d, 'vi', 'in1'), strip(d, 'vi', 'in media')
+    mic1 = strip(d, 'b', 'mic1')
+    d.check(media.hold_widget.get_parent() is media.primary_widget.get_parent(), 'lock sits next to the star')
+    d.check(strip(d, 'a', 'headset').hold_widget.get_parent() is None, 'hardware outputs have no lock')
+
+    # Without a hold the mixer follows, as it did before
+    media.primary_widget.set_active(True)
+    yield 0.4
+    d.check(_default('sink') == 'inmedia', 'star sets the default')
+    _take_default('sink', FRAME)
+    yield 0.5
+    d.check(_default('sink') == FRAME, f'nothing holds it: {_default("sink")}')
+    d.check(not media.primary_widget.get_active(), 'the star shows it left')
+
+    # The lock makes it the default as well
+    media.hold_widget.set_active(True)
+    yield 0.4
+    d.check(_default('sink') == 'inmedia', f'holding makes it the default: {_default("sink")}')
+    d.check(media.primary_widget.get_active() and media.device_model.primary, 'and shows that')
+    d.shot('hold_on')
+
+    # A program following the default goes along and back, it is not pinned anywhere
+    d.play('Follower', binary='follower', freq=500)
+    yield 0.8
+    d.check(stream_device('Follower') == 'inmedia', f'program on the default: {stream_device("Follower")}')
+    card = d.card('follower')
+
+    started = time.monotonic()
+    _take_default('sink', FRAME)
+    while _default('sink') != 'inmedia' and time.monotonic() - started < 3:
+        yield 0.01
+    taken_back = time.monotonic() - started
+    print(f'taken back after {taken_back * 1000:.0f} ms')
+    d.check(taken_back < 1, f'taken back quickly: {taken_back:.3f}s')
+    yield 0.5
+    d.check(_default('sink') == 'inmedia', f'stays back: {_default("sink")}')
+    d.check(media.primary_widget.get_active() and media.hold_widget.get_active(), 'the star and lock did not move')
+    d.check(media.device_model.primary and media.device_model.hold_primary, 'neither did the model')
+    d.check(stream_device('Follower') == 'inmedia', f'the program is back: {stream_device("Follower")}')
+    d.check(not card.entry.known.device, f'and did not get pinned: {card.entry.known.device}')
+
+    # The other ways to change it
+    subprocess.run(['pactl', 'set-default-sink', 'indiscord'], check=True)
+    yield 0.5
+    d.check(_default('sink') == 'inmedia', f'pactl loses too: {_default("sink")}')
+
+    # A device that appears and takes the default right away, like the Frame's own
+    create_null_sink('late_arrival')
+    _take_default('sink', 'late_arrival')
+    yield 0.5
+    d.check(_default('sink') == 'inmedia', f'a new device loses too: {_default("sink")}')
+
+    # A virtual output, on its own
+    mic1.hold_widget.set_active(True)
+    yield 0.4
+    d.check(_default('source') == 'mic1', f'virtual output is held: {_default("source")}')
+    _take_default('source', MIC_NAME)
+    yield 0.5
+    d.check(_default('source') == 'mic1', f'the default input comes back: {_default("source")}')
+    d.check(_default('sink') == 'inmedia', 'the output side did not care')
+
+    # Someone who will not give up does not make both of us spin
+    calls = []
+    original = pmctl_async.set_primary
+
+    async def counted(*args):
+        calls.append(time.monotonic())
+        return await original(*args)
+
+    pmctl_async.set_primary = counted
+    insist = f'pw-metadata -n default 0 default.configured.audio.sink \'{{ "name": "{FRAME}" }}\' Spa:String:JSON >/dev/null'
+    insisting = subprocess.Popen(['sh', '-c', f'for i in $(seq 100); do {insist}; sleep 0.02; done'])
+    yield 2.0
+    insisting.terminate()
+    insisting.wait()
+    pmctl_async.set_primary = original
+    print(f'{len(calls)} times taken back in 2 s of insisting')
+    d.check(1 <= len(calls) <= 6, f'at a bounded rate: {len(calls)}')
+    yield 1.2
+    d.check(_default('sink') == 'inmedia', f'and it wins in the end: {_default("sink")}')
+
+    # The star is the mixer saying something else: the hold goes along
+    in1.primary_widget.set_active(True)
+    yield 0.4
+    d.check(_default('sink') == 'in1', f'star moves the default: {_default("sink")}')
+    d.check(in1.hold_widget.get_active() and not media.hold_widget.get_active(), 'the lock moves along')
+    d.check(not media.primary_widget.get_active(), 'star left the other strip')
+    _take_default('sink', FRAME)
+    yield 0.5
+    d.check(_default('sink') == 'in1', f'the new one is held: {_default("sink")}')
+
+    # And so does a lock on another strip
+    media.hold_widget.set_active(True)
+    yield 0.4
+    d.check(_default('sink') == 'inmedia' and media.primary_widget.get_active(), 'lock on another strip takes over')
+    d.check(not in1.hold_widget.get_active() and not in1.primary_widget.get_active(), 'the first lets go')
+
+    # Clicking the star of the default does not fake it being off
+    media.primary_widget.set_active(False)
+    yield 0.2
+    d.check(media.primary_widget.get_active(), 'a star cannot be turned off')
+
+    # Editing a device recreates it
+    media.popover.confirm_button.emit('clicked')
+    yield 1.0
+    d.check(strip(d, 'vi', 'in media').device_model.hold_primary, 'editing the device keeps the hold')
+    d.check(_default('sink') == 'inmedia', f'and it is the default again: {_default("sink")}')
+
+    # Off again: changes stick
+    media = strip(d, 'vi', 'in media')
+    media.hold_widget.set_active(False)
+    yield 0.2
+    _take_default('sink', FRAME)
+    yield 0.5
+    d.check(_default('sink') == FRAME, f'no hold, no switching back: {_default("sink")}')
+    d.check(not media.primary_widget.get_active(), 'the star follows again')
+
+    subprocess.run(['pw-cli', 'destroy', 'late_arrival'], check=False, stdout=subprocess.DEVNULL)
+    mic1.hold_widget.set_active(False)
+    yield 0.2
+    d.stop_players()
+
+
+def hold_then_killed_and_default_taken(d):
+    '''The next one starts while something else is the default.'''
+    import os
+    import signal
+    import subprocess
+    media, mic1 = strip(d, 'vi', 'in media'), strip(d, 'b', 'mic1')
+    media.hold_widget.set_active(True)
+    mic1.hold_widget.set_active(True)
+    yield 2.5  # the autosave
+    d.check(_default('sink') == 'inmedia', 'held')
+    insist = f'pw-metadata -n default 0 default.configured.audio.sink \'{{ "name": "{FRAME}" }}\' Spa:String:JSON >/dev/null'
+    subprocess.Popen(['sh', '-c', f'sleep 0.2; {insist}'], start_new_session=True)
+    os.kill(os.getpid(), signal.SIGKILL)
+
+
+def hold_wins_at_start(d):
+    media = strip(d, 'vi', 'in media')
+    yield 0.8
+    d.check(media.hold_widget.get_active(), 'the lock is saved')
+    d.check(_default('sink') == 'inmedia', f'changed while it was off, taken back at start: {_default("sink")}')
+    d.check(media.primary_widget.get_active(), 'star is there')
+    d.check(strip(d, 'b', 'mic1').hold_widget.get_active(), 'the lock on the virtual output too')
+
+
+def hold_then_killed(d):
+    '''What WirePlumber remembers across a reboot is what the other program set.'''
+    import os
+    import signal
+    yield 0.3
+    strip(d, 'vi', 'in media').hold_widget.set_active(False)
+    yield 0.2
+    _take_default('sink', FRAME)
+    yield 0.4
+    d.check(_default('sink') == FRAME, 'the session manager saves this one')
+    strip(d, 'vi', 'in media').hold_widget.set_active(True)
+    yield 2.5  # the autosave
+    os.kill(os.getpid(), signal.SIGKILL)
+
+
+def hold_after_reboot(d):
+    media = strip(d, 'vi', 'in media')
+    yield 1.0
+    d.check(media.hold_widget.get_active(), 'hold survives a reboot')
+    d.check(_default('sink') == 'inmedia', f'it is the default after a reboot: {_default("sink")}')
+    _take_default('sink', FRAME)
+    yield 0.5
+    d.check(_default('sink') == 'inmedia', f'and still held: {_default("sink")}')
+    d.shot('hold_after_reboot')
+
+    # The rest of the suite works with what it had
+    media.hold_widget.set_active(False)
+    strip(d, 'b', 'mic1').hold_widget.set_active(False)
+    strip(d, 'vi', 'in1').primary_widget.set_active(True)
+    yield 2.5
 
 
 def _labels(widget):

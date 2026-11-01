@@ -51,6 +51,8 @@ class GtkController(SignalModel):
             Emitted when a device's mute state is changed.
         primary(device_type: str, device_id: str):
             Emitted when a device is set as primary.
+        hold_primary(device_type: str, device_id: str, state: bool):
+            Emitted when a device is held as primary, or no longer is.
         connect(input_type: str, input_id: str, output_type: str, output_id: str, state: bool):
             Emitted when a connection between devices is changed.
         connection_change(input_type: str, input_id: str, output_type: str, output_id: str, connection_model):
@@ -467,6 +469,7 @@ class GtkController(SignalModel):
             'route_volume': self.set_route_volume,
             'use_loopback': self.set_use_loopback,
             'primary': self.set_primary,
+            'hold_primary': self.set_hold_primary,
             'device_change': self.update_device_model,
             'device_remove': self.device_remove,
             'update_connection': self.update_connection,
@@ -684,10 +687,20 @@ class GtkController(SignalModel):
         '''
         Set model primary
         '''
-        for target_id, target_device in self.content.device_box[device_type].widgets.items():
-            if target_id != device_id:
-                target_device.primary_widget.set_primary(False)
         self.emit('primary', device_type, device_id)
+        self._show_primary(device_type)
+
+    def set_hold_primary(self, _, state: bool, device_type, device_id):
+        '''
+        Hold a device as primary, or let it go
+        '''
+        self.emit('hold_primary', device_type, device_id, state)
+        self._show_primary(device_type)
+
+    def _show_primary(self, device_type):
+        for device in self.content.device_box[device_type].widgets.values():
+            device.primary_widget.set_primary(bool(device.device_model.primary))
+            device.hold_widget.set_hold(device.device_model.hold_primary)
 
     def set_connection(self, _, output_type, output_id, state: bool, input_type, input_id):
         '''

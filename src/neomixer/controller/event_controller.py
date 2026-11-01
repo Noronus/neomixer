@@ -15,6 +15,8 @@ from neomixer.model.app_model import AppModel
 LOG = logging.getLogger("generic")
 
 RECONNECT_SECONDS = 1.0
+# A program that insists on being the default would flip it back and forth with us at full speed
+HOLD_SECONDS = 0.5
 
 
 class EventController(SignalModel):
@@ -76,6 +78,7 @@ class EventController(SignalModel):
         # device 'new'/'change' event so we can resolve removed devices by
         # index after PA has already discarded them.
         self._pa_index_cache: dict[tuple[str, int], str] = {}
+        self._held_at: dict[str, float] = {}
 
     def _handle_listen_error(self, fut):
         try:
@@ -167,6 +170,9 @@ class EventController(SignalModel):
             if connected_before:
                 LOG.info('The sound server is back')
                 self.emit('pa_server_back')
+
+            # It may have been changed while nobody was listening
+            await self._hold_defaults()
 
             async for event in events:
                 yield PulseEvent(type=event.t._value, facility=event.facility._value, index=event.index)
@@ -261,6 +267,8 @@ class EventController(SignalModel):
         for device_type, device_id, _ in search_res:
             self.emit('pa_device_new', device_type, device_id)
 
+        await self._hold_defaults()
+
     async def _handle_device_remove_event(self, event):
         '''
         Handle a device remove event (e.g. hardware unplug, externally-removed
@@ -309,6 +317,13 @@ class EventController(SignalModel):
             pm_device_type = 'vi' if pa_device_type == 'sink' else 'b'
             primary = await pmctl_async.get_primary(pa_device_type, self._pulse)
             primary_name = primary.name if primary else None
+
+            # What changed the default does not get to stay, so the strip keeps its star
+            held = self.device_repository.find_device_by_key('hold_primary', True, (pm_device_type,))
+            if held:
+                await self._hold_default(held[0][2], primary_name)
+                continue
+
             pm_primary_list = self.device_repository.get_primary_device(pm_device_type)
 
             if pm_primary_list:
@@ -336,3 +351,29 @@ class EventController(SignalModel):
             device_type, device_id, device = search_list[0]
             device.set_primary(True, emit=False)
             self.emit('pa_primary_change', device_type, device_id)
+
+    async def _hold_defaults(self):
+        '''Take the default back for the devices held as default, if it went elsewhere.'''
+        for pa_device_type, pm_device_type in (('sink', 'vi'), ('source', 'b')):
+            held = self.device_repository.find_device_by_key('hold_primary', True, (pm_device_type,))
+            if held:
+                primary = await pmctl_async.get_primary(pa_device_type, self._pulse)
+                await self._hold_default(held[0][2], primary.name if primary else None)
+
+    async def _hold_default(self, device, current_name):
+        '''
+        Something else made itself the default: take it back. Right away the first time, and at
+        most every HOLD_SECONDS if it keeps at it.
+        '''
+        if current_name == device.name:
+            return
+
+        wait = self._held_at.get(device.device_type, 0) + HOLD_SECONDS - time.monotonic()
+        if wait > 0:
+            await asyncio.sleep(wait)
+            if not device.hold_primary:
+                return
+
+        self._held_at[device.device_type] = time.monotonic()
+        if await pmctl_async.set_primary(device.device_type, device.name, self._pulse):
+            LOG.info('The default %s changed to %s, switching back to %s', device.device_type, current_name, device.name)

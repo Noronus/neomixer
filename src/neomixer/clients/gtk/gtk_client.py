@@ -174,6 +174,7 @@ class GtkClient(Gtk.Application):
             'volume': self.device_controller.set_volume,
             'mute': self.device_controller.set_mute,
             'primary': self.device_controller.set_primary,
+            'hold_primary': self.device_controller.set_hold_primary,
             'connect': self.device_controller.set_connection,
             'route_volume': self.device_controller.set_route_volume,
             'use_loopback': self.device_controller.set_use_loopback,

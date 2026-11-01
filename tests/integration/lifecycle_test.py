@@ -2,7 +2,7 @@
 The whole app against a real, private sound server: a clean sandbox, then scenarios one after
 the other, as separate runs of the app.
 
-    python tests/integration/lifecycle_test.py [screenshot dir]
+    python tests/integration/lifecycle_test.py [screenshot dir] [only these scenarios...]
 '''
 import json
 import os
@@ -19,6 +19,8 @@ SANDBOX = os.path.join(ROOT, f'.sandbox-test-{os.getpid()}')
 SCRIPT = os.path.join(ROOT, 'tests', 'integration', 'sandbox.sh')
 DRIVER = os.path.join(ROOT, 'tests', 'integration', 'ui_driver.py')
 PYTHON = sys.executable
+# The code under test: this checkout, or an installed package
+CODE = os.environ.get('NEOMIXER_CODE', os.path.join(ROOT, 'src'))
 
 HEADSET = 'alsa_output.test_headset.analog-stereo'
 SPEAKERS = 'alsa_output.test_card.analog-stereo'
@@ -83,6 +85,12 @@ SCENARIOS = (
     ('saved_by_sigterm', 0),
     ('server_restart', 0),
     ('close_keeps_running', 0),
+    ('default_is_held', 0),
+    ('hold_then_killed_and_default_taken', -signal.SIGKILL),
+    ('hold_wins_at_start', 0),
+    ('hold_then_killed', -signal.SIGKILL),
+    ('REBOOT', None),
+    ('hold_after_reboot', 0),
     ('text_size_setting', 0),
     ('text_follows_the_monitor', 0),
     ('output_eq', 0),
@@ -126,7 +134,7 @@ def processes_of_the_sandbox(env):
 
 def sandbox_env():
     env = dict(os.environ)
-    env['PYTHONPATH'] = os.pathsep.join((os.path.join(ROOT, 'src'), ROOT))
+    env['PYTHONPATH'] = os.pathsep.join((CODE, ROOT))
     with open(os.path.join(SANDBOX, 'env'), encoding='utf-8') as env_file:
         for line in env_file:
             parts = shlex.split(line)
@@ -147,8 +155,26 @@ def fake_hardware(env):
     subprocess.run([PYTHON, '-c', code, json.dumps(FIXTURE)], env=env, check=True, capture_output=True)
 
 
+def run_scenario(name, expected, env, shots):
+    print(f'=== {name}', flush=True)
+    started = time.monotonic()
+    run = subprocess.run([PYTHON, DRIVER, name, shots], env=env, capture_output=True, text=True, timeout=240, check=False)
+    lines = [line for line in run.stdout.splitlines() if line.startswith(('ok ', 'FAIL', 'screenshot', 'cpu', 'taken back', 'times taken'))
+             or ' times taken back' in line]
+    errors = [line for line in run.stderr.splitlines() if 'Traceback' in line or '[ERROR]' in line or 'Error:' in line
+              or 'CRITICAL' in line or ('WARNING' in line and 'Gizmo' not in line)]
+    print('\n'.join(lines))
+    if errors:
+        print('\n'.join(errors))
+        print(run.stderr[-3000:])
+    passed = run.returncode == expected and not any(line.startswith('FAIL') for line in lines)
+    print(f'--> {"pass" if passed else f"FAILED (exit {run.returncode})"} in {time.monotonic() - started:.1f}s', flush=True)
+    return passed
+
+
 def main():
     shots = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.path.join(ROOT, '.sandbox-shots')
+    only = sys.argv[2:]
     portal_before = document_portal_mount()
     subprocess.run([SCRIPT, 'start', SANDBOX], check=True)
     env = sandbox_env()
@@ -160,26 +186,22 @@ def main():
             json.dump(FIXTURE, out)
         fake_hardware(env)
 
+        # Someone new has no config at all, and nothing to import
+        fresh = dict(env, XDG_CONFIG_HOME=os.path.join(env['XDG_CONFIG_HOME'], 'first-run'))
+        if not only or 'first_run' in only:
+            results.append(('first_run', run_scenario('first_run', 0, fresh, shots)))
+
         for name, expected in SCENARIOS:
+            if only and name not in only:
+                continue
+
             if name == 'REBOOT':
                 subprocess.run([SCRIPT, 'reboot', SANDBOX], check=True)
                 fake_hardware(env)
                 print('=== rebooted')
                 continue
 
-            print(f'=== {name}', flush=True)
-            started = time.monotonic()
-            run = subprocess.run([PYTHON, DRIVER, name, shots], env=env, capture_output=True, text=True, timeout=240, check=False)
-            lines = [line for line in run.stdout.splitlines() if line.startswith(('ok ', 'FAIL', 'screenshot', 'cpu'))]
-            errors = [line for line in run.stderr.splitlines() if 'Traceback' in line or '[ERROR]' in line or 'Error:' in line
-                      or 'CRITICAL' in line or ('WARNING' in line and 'Gizmo' not in line)]
-            print('\n'.join(lines))
-            if errors:
-                print('\n'.join(errors))
-                print(run.stderr[-3000:])
-            passed = run.returncode == expected and not any(line.startswith('FAIL') for line in lines)
-            results.append((name, passed))
-            print(f'--> {"pass" if passed else f"FAILED (exit {run.returncode})"} in {time.monotonic() - started:.1f}s', flush=True)
+            results.append((name, run_scenario(name, expected, env, shots)))
     finally:
         subprocess.run([SCRIPT, 'stop', SANDBOX], check=False, capture_output=True)
 
