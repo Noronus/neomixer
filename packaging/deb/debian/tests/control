@@ -1,3 +1,0 @@
-Tests: routing
-Depends: @, dbus, libgtk-4-bin, wireplumber
-Restrictions: allow-stderr

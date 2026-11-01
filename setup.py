@@ -26,7 +26,7 @@ class BuildWithTranslations(_build_py):
         super().run()
 
 
-DATA_FILES = [('share/licenses/pulsemeeter/', ['LICENSE']), ]
+DATA_FILES = [('share/licenses/neomixer/', ['LICENSE']), ]
 DATA_FILES += gather_data_files('share', '')
 
 setup(

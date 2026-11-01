@@ -3,12 +3,12 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from pulsemeeter.scripts import pmctl
+from neomixer.scripts import pmctl
 
 
 def _dump(graph):
     '''Patch pw-dump to return the given graph, then call get_app_pins.'''
-    with mock.patch('pulsemeeter.scripts.pmctl.subprocess.check_output',
+    with mock.patch('neomixer.scripts.pmctl.subprocess.check_output',
                     return_value=json.dumps(graph).encode()):
         return pmctl.get_app_pins()
 
@@ -31,7 +31,7 @@ def _target(subject, key, value):
 class TestGetAppPins(unittest.TestCase):
 
     def test_dumps_only_the_default_metadata(self):
-        with mock.patch('pulsemeeter.scripts.pmctl.subprocess.check_output', return_value=b'[]') as check_output:
+        with mock.patch('neomixer.scripts.pmctl.subprocess.check_output', return_value=b'[]') as check_output:
             assert pmctl.get_app_pins() == {}
         assert check_output.call_args.args[0] == ['pw-dump', 'default']
 
@@ -48,7 +48,7 @@ class TestGetAppPins(unittest.TestCase):
         assert _dump(graph) == {1: False}
 
     def test_empty_value_is_no_entry(self):
-        # what older pulsemeeter versions left behind on unpin
+        # what older neomixer versions left behind on unpin
         assert _dump([_default_metadata(_target(5, 'target.object', ''))]) == {}
 
     def test_other_keys_and_metadata_ignored(self):
@@ -65,12 +65,12 @@ class TestGetAppPins(unittest.TestCase):
         assert _dump(graph) == {3: True}
 
     def test_pw_dump_missing_returns_none(self):
-        with mock.patch('pulsemeeter.scripts.pmctl.subprocess.check_output',
+        with mock.patch('neomixer.scripts.pmctl.subprocess.check_output',
                         side_effect=FileNotFoundError()):
             assert pmctl.get_app_pins() is None
 
     def test_pw_dump_bad_json_returns_none(self):
-        with mock.patch('pulsemeeter.scripts.pmctl.subprocess.check_output',
+        with mock.patch('neomixer.scripts.pmctl.subprocess.check_output',
                         return_value=b'not json'):
             assert pmctl.get_app_pins() is None
 
@@ -113,7 +113,7 @@ class TestIsMovable(unittest.TestCase):
 class TestPinApp(unittest.TestCase):
 
     def setUp(self):
-        run = mock.patch('pulsemeeter.scripts.pmctl.subprocess.run')
+        run = mock.patch('neomixer.scripts.pmctl.subprocess.run')
         self.run = run.start()
         self.addCleanup(run.stop)
 

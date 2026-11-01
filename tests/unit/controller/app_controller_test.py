@@ -5,9 +5,9 @@ from unittest import mock
 import pulsectl
 from pulsectl import PulseSinkInputInfo, PulseSourceOutputInfo
 
-from pulsemeeter.scripts import pmctl
-from pulsemeeter.model.app_model import AppModel
-from pulsemeeter.controller.app_controller import AppController
+from neomixer.scripts import pmctl
+from neomixer.model.app_model import AppModel
+from neomixer.controller.app_controller import AppController
 
 
 INDEX = 7

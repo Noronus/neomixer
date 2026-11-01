@@ -1,6 +1,6 @@
-from pulsemeeter.model.config_model import ConfigModel
-from pulsemeeter.model.device_model import DeviceModel
-from pulsemeeter.model.connection_model import ConnectionModel
+from neomixer.model.config_model import ConfigModel
+from neomixer.model.device_model import DeviceModel
+from neomixer.model.connection_model import ConnectionModel
 
 
 def _input_device(name='vi_a', channels=2, primary=False):

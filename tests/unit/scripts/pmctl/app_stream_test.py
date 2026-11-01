@@ -7,7 +7,7 @@ from unittest import mock
 import pulsectl
 from pulsectl import PulseSinkInputInfo, PulseSourceOutputInfo
 
-from pulsemeeter.scripts import pmctl, pmctl_async
+from neomixer.scripts import pmctl, pmctl_async
 
 
 # pipewire-pulse gives a sink and its monitor source the same index, so a
@@ -95,7 +95,7 @@ class _AppStreamCases:
         assert pmctl.get_app_object_id(self.app.index, self.APP_TYPE) is None
 
     def test_list_apps_resolves_own_device_and_skips_loopbacks(self):
-        loopback = _stream(self.APP_TYPE, index=8, node_name='input.pm_route_test_sink_to_test_out')
+        loopback = _stream(self.APP_TYPE, index=8, node_name='input.nm_route_test_sink_to_test_out')
         self.pulse = _fake_pulse([self.app, loopback])
         with mock.patch.object(pmctl, 'PULSE', self.pulse):
             apps = pmctl.list_apps(self.APP_TYPE)

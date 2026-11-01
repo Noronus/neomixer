@@ -1,6 +1,6 @@
 import unittest
 
-from pulsemeeter.model.app_model import AppModel
+from neomixer.model.app_model import AppModel
 
 
 class _FakeVolume:

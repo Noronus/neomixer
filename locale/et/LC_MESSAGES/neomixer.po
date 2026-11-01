@@ -1,0 +1,387 @@
+# Estonian translations for neomixer.
+# Copyright (C) 2026 ORGANIZATION
+# This file is distributed under the same license as the neomixer
+# project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: neomixer 2.2.0\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2026-09-06 17:54-0600\n"
+"PO-Revision-Date: 2026-10-29 11:51+0000\n"
+"Last-Translator: Priit Jõerüüt <jrthwlate@users.noreply.hosted.weblate.org>\n"
+"Language: et\n"
+"Language-Team: Estonian <https://hosted.weblate.org/projects/neomixer/"
+"neomixer/et/>\n"
+"Plural-Forms: nplurals=2; plural=n != 1;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+"X-Generator: Weblate 2026.11.dev0\n"
+
+#: src/neomixer/clients/cli/cli_client.py:41
+#, python-format
+msgid "Invalid device id: %s"
+msgstr "Vigane seadme tunnus: %s"
+
+#: src/neomixer/clients/gtk/layouts/content/tabbed.py:47
+msgid "Settings"
+msgstr "Seadistused"
+
+#: src/neomixer/clients/gtk/widgets/content.py:49
+#, python-format
+msgid "Create new %s"
+msgstr "Loo uus %s"
+
+#: src/neomixer/clients/gtk/widgets/content.py:59
+msgid "Create device"
+msgstr "Loo seade"
+
+#: src/neomixer/clients/gtk/widgets/content.py:64
+#: src/neomixer/clients/gtk/widgets/content.py:74
+msgid "Open settings menu"
+msgstr "Ava seadistuste menüü"
+
+#: src/neomixer/clients/gtk/widgets/content.py:73
+msgid "Settings menu"
+msgstr "Seadistuste menüü"
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:18
+msgid "What is NeoMixer?"
+msgstr "Mis on NeoMixer?"
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:19
+msgid ""
+"NeoMixer is a virtual audio mixer and router built on top of PipeWire."
+" It lets you create virtual devices and freely route audio between your "
+"inputs and outputs, controlling volume and muting along the way."
+msgstr ""
+"NeoMixer on PipeWire’i baasil loodud virtuaalne helimikser ja -ruuter. "
+"Selle abil saad luua virtuaalseid seadmeid ning suunata heli vabalt "
+"sisendite ja väljundite vahel, reguleerides samal ajal helivaljust ja "
+"summutades seda."
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:24
+msgid "The four device types"
+msgstr "Neli seadmetüüpi"
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:25
+msgid ""
+"<b>Hardware Inputs</b> are physical sources such as microphones and line-"
+"in.\n"
+"<b>Virtual Inputs</b> are virtual sinks that applications can play into.\n"
+"<b>Hardware Outputs</b> are physical sinks such as speakers and "
+"headphones.\n"
+"<b>Virtual Outputs</b> are virtual sources that applications can capture "
+"from."
+msgstr ""
+"<b>Riistvaralised sisendid</b> on füüsilised allikad nagu mikrofonid või "
+"ühendatud helikaablid..\n"
+"<b>Virtuaalsed sisendid</b> on virtuaalsed väljundid, kuhu rakendused saavad "
+"heli edastada.\n"
+"<b>Riistvaralised väljundid</b> on füüsilised väljundseadmed nagu kõlarid "
+"või mikrofonid..\n"
+"<b>Virtuaalsed väljundid</b> on virtuaalsed allikad, mille sisendit "
+"rakendused saavad kasutada/hõivata.."
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:31
+msgid "Routing"
+msgstr "Ruuting"
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:32
+msgid ""
+"Audio always flows from an input to an output: Hardware and Virtual "
+"Inputs connect to Hardware and Virtual Outputs. Use the connection "
+"toggles on each input device to send its audio to the outputs you want."
+msgstr ""
+"Heli liigub alati sisendist väljundisse: riistvara- ja virtuaalsed sisendid "
+"ühendatakse riistvara- ja virtuaalsete väljunditega. Kasuta iga sisendseadme "
+"ühenduslüliteid, et suunata selle heli soovitud väljunditesse."
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:37
+msgid "Cleanup"
+msgstr "Järelkoristus"
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:38
+msgid ""
+"NeoMixer has the ability to leave or cleanup the virtual device and "
+"routes it creates with the cleanup setting. If NeoMixer is closed, it "
+"won't be able to monitor for hotplugging"
+msgstr ""
+"NeoMixer on oskus virtuaalse seadme ja selle loodud marsruutide "
+"allesjätmiseks või eemaldamiseks järelkoristuse seadistuse abil. Kui "
+"NeoMixer suletakse, ei saa see enam jälgida seadmete ühendamist reaalajas"
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:43
+msgid "Primary device"
+msgstr "Põhiseade"
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:44
+msgid ""
+"Marking a device as primary makes it the default that new applications "
+"attach to automatically. This sets the primary in PipeWire itself."
+msgstr ""
+"Seadme põhiliseks märkimine muudab selle vaikimisi seadmeks, millega uued "
+"rakendused automaatselt ühenduvad. See määrab põhiseadme PipeWire'is endas."
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:48
+msgid "VU meters & settings"
+msgstr "VU-mõõdik ja seadistused"
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:49
+msgid ""
+"VU meters show the live volume peak of each device. Open the settings "
+"menu to toggle VU meters, enable cleanup on exit, and switch between the "
+"available layouts. Enabling VU Meters will show the inputs \"in use\" by "
+"NeoMixer."
+msgstr ""
+"VU-mõõdikud näitavad iga seadme hetke helivaljuse tippväärtust. Ava "
+"seadistuste menüü, et lülitada sisse või välja VU-mõõdikuid, aktiveerida "
+"väljumisel nende eemaldamine (järelkoristus) ja valida sobiv paigutus. VU-"
+"mõõdikute sisselülitamisel kuvatakse sisendid, mida NeoMixer „kasutab“."
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:55
+msgid ""
+"You can reopen this guide any time from the information button in the "
+"settings menu."
+msgstr ""
+"Saad selle juhendi igal ajal uuesti avada seadistuste menüüs olevast "
+"teabenupust."
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:64
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:111
+msgid "Welcome to NeoMixer!"
+msgstr "Tere tulemast, see on NeoMixer!"
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:90
+msgid "Get started"
+msgstr "Alustame siis"
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:116
+#, python-format
+msgid "Version %s"
+msgstr "Versioon %s"
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:124
+msgid "View Source"
+msgstr "Vaata lähtekoodi"
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:132
+msgid "Discord"
+msgstr "Discord"
+
+#: src/neomixer/clients/gtk/widgets/app/app_dropdown.py:35
+msgid "Select the output device for this app"
+msgstr "Vali selle rakenduse jaoks väljundseade"
+
+#: src/neomixer/clients/gtk/widgets/app/app_dropdown.py:37
+msgid "Select the input device for this app"
+msgstr "Vali selle rakenduse jaoks sisendseade"
+
+#: src/neomixer/clients/gtk/widgets/common/default_widget.py:25
+msgid "Primary"
+msgstr "Esmane"
+
+#: src/neomixer/clients/gtk/widgets/common/default_widget.py:34
+msgid "This device is primary"
+msgstr "See on esmane seade"
+
+#: src/neomixer/clients/gtk/widgets/common/default_widget.py:36
+msgid "Set as primary device"
+msgstr "Määra esmaseks seadmeks"
+
+#: src/neomixer/clients/gtk/widgets/common/mute_widget.py:24
+msgid "Mute"
+msgstr "Summuta"
+
+#: src/neomixer/clients/gtk/widgets/common/mute_widget.py:25
+msgid "Mute toggle"
+msgstr "Lülita summutamine sisse/välja"
+
+#: src/neomixer/clients/gtk/widgets/common/port_selector_widget.py:19
+msgid "Selected ports: "
+msgstr "Valitud pordid: "
+
+#: src/neomixer/clients/gtk/widgets/common/port_selector_widget.py:33
+msgid "Toggle the port "
+msgstr "Lülita port sisse/välja: "
+
+#: src/neomixer/clients/gtk/widgets/common/volume_widget.py:38
+#: src/neomixer/clients/gtk/widgets/common/volume_widget.py:41
+msgid "Volume Slider"
+msgstr "Helivaljuse liugurnupp"
+
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:28
+msgid "Enable VU Meters"
+msgstr "Lülita VU-mõõdikud sisse"
+
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:29
+msgid "Enable Cleanup"
+msgstr "Lülita järelkoristus sisse"
+
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:30
+msgid "Layout "
+msgstr "Paigutus "
+
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:33
+#: src/neomixer/clients/gtk/widgets/popovers/edit_connection_widget.py:25
+msgid "Apply"
+msgstr "Rakenda"
+
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:35
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:39
+msgid "Open the welcome guide"
+msgstr "Ava algusjuhend"
+
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:41
+msgid "Enable or disable VU meters (volume peak)"
+msgstr "Lülita VU-mõõdikud sisse/välja (helivaljuse tippväärtus)"
+
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:42
+msgid "Enable or disable cleaning up devices and connections upon closing"
+msgstr ""
+"Lülita seadmete ja nende ühenduste eemaldamine (järelkoristus) nende "
+"sulgemisel sisse/välja"
+
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:43
+msgid "Select the GUI layout"
+msgstr "Vali graafilise kasutajaliidese paigutus"
+
+#: src/neomixer/clients/gtk/widgets/device/connection_widget.py:50
+msgid "Enable per-route volume (uses pw-loopback)"
+msgstr "Kasuta ruutingukohast helivaljust (abiks on pw-loopback)"
+
+#: src/neomixer/clients/gtk/widgets/device/connection_widget.py:62
+msgid "Route volume"
+msgstr "Ruutingukohane valjus"
+
+#: src/neomixer/clients/gtk/widgets/device/connection_widget.py:78
+#, python-format
+msgid "Connect to %s, right click to open connection settings"
+msgstr "Ühenda „%s“ seadmega, parem klõps avab ühenduse seadistused"
+
+#: src/neomixer/clients/gtk/widgets/device/connection_widget.py:97
+msgid "Failed to create route"
+msgstr "Ruutingu loomine ei õnnestunud"
+
+#: src/neomixer/clients/gtk/widgets/device/device_widget.py:82
+#: src/neomixer/clients/gtk/widgets/device/device_widget.py:92
+msgid "Open device settings"
+msgstr "Ava seadme seadistused"
+
+#: src/neomixer/clients/gtk/widgets/device/device_widget.py:91
+msgid "Device settings"
+msgstr "Seadme seadistused"
+
+#: src/neomixer/clients/gtk/widgets/device/device_widget.py:127
+msgid "Failed to create device"
+msgstr "Seadme loomine ei õnnestunud"
+
+#: src/neomixer/clients/gtk/widgets/device/device_widget.py:133
+#, python-format
+msgid "Device disconnected: %s"
+msgstr "Seadme ühendus on katkestatud: %s"
+
+#: src/neomixer/clients/gtk/widgets/popovers/device_settings_popover.py:28
+msgid "Nick: "
+msgstr "Hüüdnimi: "
+
+#: src/neomixer/clients/gtk/widgets/popovers/device_settings_popover.py:28
+msgid "Enter a nickname for the device"
+msgstr "Sisesta seadme hüüdnimi"
+
+#: src/neomixer/clients/gtk/widgets/popovers/device_settings_popover.py:29
+msgid "Name: "
+msgstr "Nimi: "
+
+#: src/neomixer/clients/gtk/widgets/popovers/device_settings_popover.py:29
+msgid "Enter a name for the device"
+msgstr "Sisesta seadme nimi"
+
+#: src/neomixer/clients/gtk/widgets/popovers/device_settings_popover.py:30
+msgid "Externally Managed"
+msgstr "Hallatud väliselt"
+
+#: src/neomixer/clients/gtk/widgets/popovers/device_settings_popover.py:32
+msgid ""
+"Check this if another application or config file owns this device's "
+"lifecycle (creates and destroys it), such as a PipeWire config or "
+"EasyEffects. NeoMixer will route and control the device but will not "
+"create it on startup or remove it on exit."
+msgstr ""
+"Märgi see valik, kui mõni teine rakendus või konfiguratsioonifail haldab "
+"selle seadme elutsüklit (loob ja sulgeb selle), näiteks PipeWire’i "
+"konfiguratsioon või EasyEffects. NeoMixer suunab ja juhib seadet, kuid ei "
+"loo seda käivitamisel ega eemalda seda sulgemisel."
+
+#: src/neomixer/clients/gtk/widgets/popovers/device_settings_popover.py:38
+msgid "Device: "
+msgstr "Seade: "
+
+#: src/neomixer/clients/gtk/widgets/popovers/device_settings_popover.py:38
+msgid "Select a device"
+msgstr "Vali seade"
+
+#: src/neomixer/clients/gtk/widgets/popovers/device_settings_popover.py:40
+msgid "Channel Map: "
+msgstr "Kanalikaart: "
+
+#: src/neomixer/clients/gtk/widgets/popovers/device_settings_popover.py:40
+msgid "Select a channel map"
+msgstr "Vali kanalikaart"
+
+#: src/neomixer/clients/gtk/widgets/popovers/edit_connection_widget.py:24
+msgid "Auto ports"
+msgstr "Portide automaatne valik"
+
+#: src/neomixer/model/types.py:10
+msgid "Hardware Inputs"
+msgstr "Riistvaralised sisendid"
+
+#: src/neomixer/model/types.py:11
+msgid "Virtual Inputs"
+msgstr "Virtuaalsed sisendid"
+
+#: src/neomixer/model/types.py:12
+msgid "Hardware Outputs"
+msgstr "Riistvaralised väljundid"
+
+#: src/neomixer/model/types.py:13
+msgid "Virtual Outputs"
+msgstr "Virtuaalsed väljundid"
+
+#: src/neomixer/model/types.py:14
+msgid "Application Outputs"
+msgstr "Rakenduste väljundid"
+
+#: src/neomixer/model/types.py:15
+msgid "Application Inputs"
+msgstr "Rakenduste sisendid"
+
+#: src/neomixer/model/types.py:20
+msgid "Physical sources such as microphones and line-in."
+msgstr "Füüsilised sisendid nagu mikrofonid või ühendatud helikaablid."
+
+#: src/neomixer/model/types.py:21
+msgid "Virtual sinks that applications can play into."
+msgstr "Virtuaalsed väljundid, kuhu rakendused saavad heli edastada."
+
+#: src/neomixer/model/types.py:22
+msgid "Physical sinks such as speakers and headphones."
+msgstr "Füüsilised väljundseadmed nagu kõlarid või mikrofonid."
+
+#: src/neomixer/model/types.py:23
+msgid "Virtual sources that applications can capture from."
+msgstr "Virtuaalsed allikad, mille sisendit rakendused saavad kasutada/hõivata."
+
+#~ msgid ""
+#~ "Check this if another application or "
+#~ "config file owns this device's lifecycle"
+#~ " (creates and destroys it), such as"
+#~ " a PipeWire config or EasyEffects. "
+#~ "NeoMixer will route and control the"
+#~ " device but will not create it "
+#~ "onstartup or remove it on exit."
+#~ msgstr ""

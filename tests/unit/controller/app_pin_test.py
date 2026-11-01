@@ -1,8 +1,8 @@
 import unittest
 from unittest import mock
 
-from pulsemeeter.controller.app_controller import AppController
-from pulsemeeter.scripts import pmctl
+from neomixer.controller.app_controller import AppController
+from neomixer.scripts import pmctl
 
 
 class TestChangeDevice(unittest.TestCase):

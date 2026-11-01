@@ -1,6 +1,6 @@
 import unittest
 
-from pulsemeeter.model.device_model import DeviceModel
+from neomixer.model.device_model import DeviceModel
 
 
 def _device(**overrides):

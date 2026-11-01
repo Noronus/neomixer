@@ -3,10 +3,10 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from pulsemeeter.scripts import pmctl
+from neomixer.scripts import pmctl
 
 
-NAME = 'pm_route_music_to_speakers'
+NAME = 'nm_route_music_to_speakers'
 
 
 def _stream(node_name, **props):
@@ -16,8 +16,8 @@ def _stream(node_name, **props):
 def _loopback(name=NAME, pid=111, capture_target='10', playback_target='20'):
     '''The (sink-input, source-output) pair pipewire-pulse lists for one pw-loopback.'''
     group = f'pw-loopback-{pid}'
-    playback = _stream(f'output.{name}', **{'node.group': group, 'pulsemeeter.target': playback_target})
-    capture = _stream(f'input.{name}', **{'node.group': group, 'pulsemeeter.target': capture_target})
+    playback = _stream(f'output.{name}', **{'node.group': group, 'neomixer.target': playback_target})
+    capture = _stream(f'input.{name}', **{'node.group': group, 'neomixer.target': capture_target})
     return playback, capture
 
 
@@ -37,13 +37,13 @@ class TestCreateLoopback(unittest.TestCase):
 
     def test_unlinked_streams_record_quoted_targets(self):
         with mock.patch.object(pmctl.subprocess, 'Popen') as m_popen:
-            pmctl.create_loopback('pm_route_Virtual_Input_to_speakers', 'Virtual Input', 'speakers', 2)
+            pmctl.create_loopback('nm_route_Virtual_Input_to_speakers', 'Virtual Input', 'speakers', 2)
         command = m_popen.call_args.args[0]
         assert command[command.index('-m') + 1] == '[ AUX0 AUX1 ]'
         assert command[command.index('--capture-props') + 1] == (
-            'pulsemeeter.target="Virtual Input" node.autoconnect=false node.linger=true node.virtual=true')
+            'neomixer.target="Virtual Input" node.autoconnect=false node.linger=true node.virtual=true')
         assert command[command.index('--playback-props') + 1] == (
-            'pulsemeeter.target="speakers" node.autoconnect=false node.linger=true node.virtual=true')
+            'neomixer.target="speakers" node.autoconnect=false node.linger=true node.virtual=true')
 
 
 class TestLoopbackStreams(unittest.TestCase):

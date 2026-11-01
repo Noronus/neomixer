@@ -1,7 +1,7 @@
 import json
 
-from pulsemeeter.model.config_model import ConfigModel
-from pulsemeeter.utils.config_persistence import ConfigPersistence
+from neomixer.model.config_model import ConfigModel
+from neomixer.utils.config_persistence import ConfigPersistence
 
 
 def _device_dict(name='vi_a', channels=2):

@@ -1,4 +1,5 @@
 pulsectl
 pulsectl_asyncio
 pygobject
+pycairo
 pydantic

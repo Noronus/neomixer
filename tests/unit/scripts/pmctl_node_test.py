@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from pulsemeeter.scripts import pmctl
+from neomixer.scripts import pmctl
 
 
 PW_CLI_INFO_OUTPUT = (
@@ -11,27 +11,27 @@ PW_CLI_INFO_OUTPUT = (
     '\tinfo:\n'
     '\t\tprops:\n'
     '*\t\tobject.serial = "1264"\n'
-    '*\t\tnode.name = "pm_route_test_bridge"\n'
+    '*\t\tnode.name = "nm_route_test_bridge"\n'
     '*\t\tmedia.class = "Audio/Sink/Internal"\n'
 )
 
 
 class TestGetNodeSerial(unittest.TestCase):
 
-    @patch('pulsemeeter.scripts.pmctl.run_command', return_value=(0, PW_CLI_INFO_OUTPUT, ''))
+    @patch('neomixer.scripts.pmctl.run_command', return_value=(0, PW_CLI_INFO_OUTPUT, ''))
     def test_serial_found(self, mock_run):
-        assert pmctl.get_node_serial('pm_route_test_bridge') == '1264'
-        mock_run.assert_called_once_with(['pw-cli', 'info', 'pm_route_test_bridge'], split=False)
+        assert pmctl.get_node_serial('nm_route_test_bridge') == '1264'
+        mock_run.assert_called_once_with(['pw-cli', 'info', 'nm_route_test_bridge'], split=False)
 
-    @patch('pulsemeeter.scripts.pmctl.run_command', return_value=(0, '', 'Error: "info: unknown global \'missing\'"'))
+    @patch('neomixer.scripts.pmctl.run_command', return_value=(0, '', 'Error: "info: unknown global \'missing\'"'))
     def test_node_not_found(self, mock_run):
         assert pmctl.get_node_serial('missing') == ''
 
-    @patch('pulsemeeter.scripts.pmctl.run_command', return_value=(1, '', ''))
+    @patch('neomixer.scripts.pmctl.run_command', return_value=(1, '', ''))
     def test_command_failed(self, mock_run):
         assert pmctl.get_node_serial('whatever') == ''
 
-    @patch('pulsemeeter.scripts.pmctl.run_command', return_value=(0, 'id: 55\nnode.name = "x"\n', ''))
+    @patch('neomixer.scripts.pmctl.run_command', return_value=(0, 'id: 55\nnode.name = "x"\n', ''))
     def test_output_without_serial(self, mock_run):
         assert pmctl.get_node_serial('x') == ''
 
@@ -45,21 +45,21 @@ PW_LINK_OUTPUT = (
 
 class TestGetPorts(unittest.TestCase):
 
-    @patch('pulsemeeter.scripts.pmctl.run_command', return_value=(0, PW_LINK_OUTPUT, ''))
+    @patch('neomixer.scripts.pmctl.run_command', return_value=(0, PW_LINK_OUTPUT, ''))
     def test_ports_filtered_by_device(self, mock_run):
         assert pmctl.get_ports('output', 'my_device') == ['playback_FL', 'playback_FR']
         mock_run.assert_called_once_with(['pw-link', '--output'])
 
-    @patch('pulsemeeter.scripts.pmctl.run_command', return_value=(0, PW_LINK_OUTPUT, ''))
+    @patch('neomixer.scripts.pmctl.run_command', return_value=(0, PW_LINK_OUTPUT, ''))
     def test_input_port_type(self, mock_run):
         pmctl.get_ports('input', 'my_device')
         mock_run.assert_called_once_with(['pw-link', '--input'])
 
-    @patch('pulsemeeter.scripts.pmctl.run_command', return_value=(0, '', ''))
+    @patch('neomixer.scripts.pmctl.run_command', return_value=(0, '', ''))
     def test_no_ports(self, _mock_run):
         assert pmctl.get_ports('output', 'my_device') == []
 
-    @patch('pulsemeeter.scripts.pmctl.run_command', return_value=(1, '', 'boom'))
+    @patch('neomixer.scripts.pmctl.run_command', return_value=(1, '', 'boom'))
     def test_command_failure_raises(self, _mock_run):
         with self.assertRaises(RuntimeError):
             pmctl.get_ports('output', 'my_device')
@@ -68,7 +68,7 @@ class TestGetPorts(unittest.TestCase):
 class TestCreateDeviceMediaClass(unittest.TestCase):
 
     def _create(self, device_type):
-        with patch('pulsemeeter.scripts.pmctl.run_command', return_value=(0, '', '')) as mock_run:
+        with patch('neomixer.scripts.pmctl.run_command', return_value=(0, '', '')) as mock_run:
             pmctl.create_device(device_type, 'test_device', 2, ['FL', 'FR'])
         return mock_run.call_args[0][0][3]
 
@@ -86,15 +86,15 @@ class TestCreateDeviceErrors(unittest.TestCase):
 
     def test_errors_about_other_objects_do_not_fail_a_created_device(self):
         with (
-            patch('pulsemeeter.scripts.pmctl.run_command', return_value=self.OTHER_OBJECT_ERRORS),
-            patch('pulsemeeter.scripts.pmctl.get_node_serial', return_value='1264'),
+            patch('neomixer.scripts.pmctl.run_command', return_value=self.OTHER_OBJECT_ERRORS),
+            patch('neomixer.scripts.pmctl.get_node_serial', return_value='1264'),
         ):
             assert pmctl.create_device('sink', 'Misc', 2, ['FL', 'FR']) is True
 
     def test_error_without_the_node_fails(self):
         with (
-            patch('pulsemeeter.scripts.pmctl.run_command', return_value=self.OTHER_OBJECT_ERRORS),
-            patch('pulsemeeter.scripts.pmctl.get_node_serial', return_value=''),
+            patch('neomixer.scripts.pmctl.run_command', return_value=self.OTHER_OBJECT_ERRORS),
+            patch('neomixer.scripts.pmctl.get_node_serial', return_value=''),
             self.assertRaises(RuntimeError),
         ):
             pmctl.create_device('sink', 'Misc', 2, ['FL', 'FR'])
@@ -105,8 +105,8 @@ class TestLinkChannels(unittest.TestCase):
     def _link_calls(self, input_ports, output_ports, channel_map, state=True):
         ports = {'output': input_ports, 'input': output_ports}
         with (
-            patch('pulsemeeter.scripts.pmctl.get_ports', side_effect=lambda t, _n: ports[t]),
-            patch('pulsemeeter.scripts.pmctl.link', return_value=True) as mock_link,
+            patch('neomixer.scripts.pmctl.get_ports', side_effect=lambda t, _n: ports[t]),
+            patch('neomixer.scripts.pmctl.link', return_value=True) as mock_link,
         ):
             pmctl.link_channels('in_device', 'out_device', channel_map, state)
         return [call.args for call in mock_link.call_args_list]
@@ -145,8 +145,8 @@ class TestLinkChannels(unittest.TestCase):
     def test_pairs_pw_link_rejects_are_returned(self):
         ports = {'output': ['monitor_FR', 'capture_1'], 'input': ['playback_FL', 'playback_FR']}
         with (
-            patch('pulsemeeter.scripts.pmctl.get_ports', side_effect=lambda t, _n: ports[t]),
-            patch('pulsemeeter.scripts.pmctl.link', side_effect=[True, False]),
+            patch('neomixer.scripts.pmctl.get_ports', side_effect=lambda t, _n: ports[t]),
+            patch('neomixer.scripts.pmctl.link', side_effect=[True, False]),
         ):
             unlinked = pmctl.link_channels('in_device', 'out_device', '0:0 1:1')
         assert unlinked == ['capture_1 -> playback_FR']
@@ -157,11 +157,11 @@ class TestLink(unittest.TestCase):
     def test_link_that_already_exists(self):
         # Every reconnect relinks existing links, which pw-link reports as an error
         result = (255, '', 'failed to link ports: File exists')
-        with patch('pulsemeeter.scripts.pmctl.run_command', return_value=result):
+        with patch('neomixer.scripts.pmctl.run_command', return_value=result):
             assert pmctl.link('a:monitor_FL', 'b:playback_FL') is True
 
     def test_runs_in_the_c_locale(self):
         # pw-link's error text is translated, and link() matches it
-        with patch('pulsemeeter.scripts.pmctl.run_command', return_value=(0, '', '')) as mock_run:
+        with patch('neomixer.scripts.pmctl.run_command', return_value=(0, '', '')) as mock_run:
             pmctl.link('a:monitor_FL', 'b:playback_FL')
         assert mock_run.call_args.kwargs['env']['LC_ALL'] == 'C'

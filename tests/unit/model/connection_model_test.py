@@ -1,4 +1,4 @@
-from pulsemeeter.model.connection_model import ConnectionModel, pair_match
+from neomixer.model.connection_model import ConnectionModel, pair_match
 
 STEREO_CAPTURE = ['capture_FL', 'capture_FR']
 STEREO_PLAYBACK = ['playback_FL', 'playback_FR']

@@ -1,13 +1,13 @@
 import unittest
 from unittest import mock
 
-from pulsemeeter.scripts import pmctl
-from pulsemeeter.model.signal_model import SignalModel
-from pulsemeeter.model.device_model import DeviceModel
-from pulsemeeter.model.config_model import ConfigModel
-from pulsemeeter.model.connection_model import ConnectionModel
-from pulsemeeter.repository.device_repository import DeviceRepository
-from pulsemeeter.controller.device_controller import DeviceController
+from neomixer.scripts import pmctl
+from neomixer.model.signal_model import SignalModel
+from neomixer.model.device_model import DeviceModel
+from neomixer.model.config_model import ConfigModel
+from neomixer.model.connection_model import ConnectionModel
+from neomixer.repository.device_repository import DeviceRepository
+from neomixer.controller.device_controller import DeviceController
 
 
 def _device(name, device_type='sink', device_class='virtual'):
@@ -215,7 +215,7 @@ class StartupTest(unittest.TestCase):
             ('kill_stray_loopback', {'return_value': 0}),
         ):
             mock.patch.object(pmctl, name, **kwargs).start()
-        mock.patch('pulsemeeter.scripts.pmctl.time.sleep', side_effect=self.next_poll).start()
+        mock.patch('neomixer.scripts.pmctl.time.sleep', side_effect=self.next_poll).start()
         self.link = mock.patch.object(pmctl, 'link', return_value=True).start()
         self.addCleanup(mock.patch.stopall)
 
