@@ -79,6 +79,7 @@ class EventController(SignalModel):
         # index after PA has already discarded them.
         self._pa_index_cache: dict[tuple[str, int], str] = {}
         self._held_at: dict[str, float] = {}
+        self._hold_check = None
 
     def _handle_listen_error(self, fut):
         try:
@@ -108,6 +109,8 @@ class EventController(SignalModel):
     def stop_listen(self):
         """Stop the listen task from a different thread"""
         self.listen_task.cancel()
+        if self._hold_check is not None:
+            self._async_loop.call_soon_threadsafe(self._hold_check.cancel)
         time.sleep(0.001)
 
     async def event_listen(self):
@@ -368,8 +371,7 @@ class EventController(SignalModel):
         if current_name == device.name:
             return
 
-        wait = self._held_at.get(device.device_type, 0) + HOLD_SECONDS - time.monotonic()
-        if wait > 0:
+        while (wait := self._held_at.get(device.device_type, 0) + HOLD_SECONDS - time.monotonic()) > 0:
             await asyncio.sleep(wait)
             if not device.hold_primary:
                 return
@@ -377,3 +379,17 @@ class EventController(SignalModel):
         self._held_at[device.device_type] = time.monotonic()
         if await pmctl_async.set_primary(device.device_type, device.name, self._pulse):
             LOG.info('The default %s changed to %s, switching back to %s', device.device_type, current_name, device.name)
+            if self._hold_check is None:
+                self._hold_check = self._async_loop.create_task(self._check_hold())
+
+    async def _check_hold(self):
+        '''
+        Someone writing the default in the same moment undoes that without an event: to the
+        session manager, which only then looks at it, the default did not change.
+        '''
+        await asyncio.sleep(HOLD_SECONDS)
+        self._hold_check = None
+        try:
+            await self._hold_defaults()
+        except (pulsectl.PulseError, pulsectl.PulseDisconnected, OSError) as e:
+            LOG.debug('Could not check the held default: %r', e)

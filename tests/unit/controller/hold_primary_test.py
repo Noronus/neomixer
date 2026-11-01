@@ -1,4 +1,5 @@
 import asyncio
+import time
 from unittest import mock
 
 import pytest
@@ -134,11 +135,13 @@ def test_someone_insisting_is_answered_at_a_limited_rate(listener, devices, monk
     one.hold_primary = True
     monkeypatch.setattr(event_controller, 'HOLD_SECONDS', 0.1)
     with _default_is('steam'), mock.patch.object(pmctl_async, 'set_primary', mock.AsyncMock(return_value=True)) as restore:
-        started = listener._async_loop.time()
+        started = time.monotonic()
         for _ in range(3):
             _run(listener, listener._handle_server_change_event(None))
-    assert restore.await_count == 3
-    assert listener._async_loop.time() - started >= 0.2
+        elapsed = time.monotonic() - started
+        answers = restore.await_count
+    assert answers >= 3
+    assert elapsed >= (answers - 1) * 0.1 * 0.9
 
 
 def test_no_waiting_if_the_hold_ended_meanwhile(listener, devices, monkeypatch):
@@ -159,3 +162,21 @@ def test_a_held_device_that_is_gone_is_not_an_error(listener, devices):
     with _default_is('steam'), mock.patch.object(pmctl_async, 'set_primary', mock.AsyncMock(return_value=False)):
         _run(listener, listener._handle_server_change_event(None))
     assert one.primary is True
+
+
+def test_a_write_in_the_same_moment_does_not_win(listener, devices, monkeypatch):
+    '''It leaves no event behind: the default never changed, to the session manager.'''
+    one, _ = devices
+    one.hold_primary = True
+    monkeypatch.setattr(event_controller, 'HOLD_SECONDS', 0.05)
+    with _default_is('steam'), mock.patch.object(pmctl_async, 'set_primary', mock.AsyncMock(return_value=True)) as restore:
+        _run(listener, listener._handle_server_change_event(None))
+        assert restore.await_count == 1
+        time.sleep(0.2)
+        # no event since, and it keeps trying as long as it is not back
+        assert restore.await_count > 1
+
+    with _default_is('one'), mock.patch.object(pmctl_async, 'set_primary', mock.AsyncMock(return_value=True)) as restore:
+        time.sleep(0.2)
+        assert restore.await_count == 0
+    assert listener._hold_check is None

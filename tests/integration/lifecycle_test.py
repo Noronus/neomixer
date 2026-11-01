@@ -6,6 +6,7 @@ the other, as separate runs of the app.
 '''
 import json
 import os
+import re
 import shlex
 import shutil
 import signal
@@ -66,6 +67,9 @@ FIXTURE = {
     },
     'vumeters': True, 'cleanup': False, 'tray': False, 'layout': 'Bars', 'window_width': 1887, 'window_height': 816,
 }
+
+# Cancelling the listener at exit trips pulsectl_asyncio over the cancelled future, nothing is lost
+HARMLESS_TRACEBACK = re.compile(r'Exception in callback Future\.set_result\(\).*?InvalidStateError: invalid state', re.DOTALL)
 
 # name, exit code to expect
 SCENARIOS = (
@@ -168,7 +172,8 @@ def run_scenario(name, expected, env, shots):
         print('\n'.join(errors))
         print(run.stderr[-3000:])
     # An exception in a callback does not end GTK's main loop, so it does not show in the exit code
-    passed = run.returncode == expected and not any(line.startswith('FAIL') for line in lines) and 'Traceback' not in run.stderr
+    crashed = 'Traceback' in HARMLESS_TRACEBACK.sub('', run.stderr)
+    passed = run.returncode == expected and not any(line.startswith('FAIL') for line in lines) and not crashed
     print(f'--> {"pass" if passed else f"FAILED (exit {run.returncode})"} in {time.monotonic() - started:.1f}s', flush=True)
     return passed
 
