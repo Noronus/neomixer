@@ -1,7 +1,8 @@
 import logging
 
-from pydantic import BaseModel, root_validator, validator
+from pydantic import BaseModel, root_validator
 from neomixer.model.device_model import DeviceModel
+from neomixer.model.known_app import KnownApp
 from neomixer.model.connection_model import ConnectionModel
 
 LOG = logging.getLogger("generic")
@@ -10,6 +11,7 @@ DEVICE_TYPES = ('vi', 'hi', 'a', 'b')
 INPUT_TYPES = ('vi', 'hi')
 OUTPUT_TYPES = ('a', 'b')
 VIRTUAL_TYPES = ('vi', 'b')
+APP_TYPES = ('sink_input', 'source_output')
 
 
 class ConfigModel(BaseModel):
@@ -22,15 +24,15 @@ class ConfigModel(BaseModel):
     '''
 
     devices: dict[str, dict[str, DeviceModel]] = {'vi': {}, 'hi': {}, 'a': {}, 'b': {}}
+    apps: dict[str, dict[str, KnownApp]] = {'sink_input': {}, 'source_output': {}}
     vumeters: bool = True
     cleanup: bool = False
-    layout: str = 'Blocks'
-    window_width: int = 800
-    window_height: int = 600
-
-    @validator('layout')
-    def capitalize_layout(cls, v):
-        return v.capitalize()
+    background: bool = True  # keep running after closing the window, to keep routing new app streams
+    show_offline_apps: bool = True
+    apps_filter: str = 'all'
+    window_width: int = 1500
+    window_height: int = 860
+    mixer_height: int = 0  # height of the mixer above the apps, 0 until the divider was moved
 
     @root_validator(skip_on_failure=True)
     def heal_invariants(cls, values):
@@ -40,6 +42,8 @@ class ConfigModel(BaseModel):
         cls._repair_volumes(devices)
         cls._dedupe_primary(devices)
         cls._repair_connections(devices)
+        for app_type in APP_TYPES:
+            values['apps'].setdefault(app_type, {})
         return values
 
     @classmethod

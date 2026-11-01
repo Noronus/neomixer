@@ -3,6 +3,7 @@ Settings for the runtime of neomixer
 '''
 import gettext
 import os
+import sys
 
 
 VERSION = '1.0.0'
@@ -14,8 +15,14 @@ XDG_CONFIG_HOME = os.getenv('XDG_CONFIG_HOME', os.path.join(HOME, '.config'))
 XDG_DATA_HOME = os.getenv('XDG_DATA_HOME', os.path.join(HOME, '.local/share'))
 XDG_STATE_HOME = os.getenv('XDG_STATE_HOME', os.path.join(HOME, '.local/state'))
 APP_RUNTIME_DIR = os.path.dirname(__file__)
+XDG_RUNTIME_DIR = os.getenv('XDG_RUNTIME_DIR', os.path.join('/run/user', str(os.getuid())))
 CONFIG_DIR = os.path.join(XDG_CONFIG_HOME, 'neomixer')
 CONFIG_FILE = os.path.join(CONFIG_DIR, 'config.json')
+LEGACY_CONFIG_FILE = os.path.join(XDG_CONFIG_HOME, 'pulsemeeter', 'config.json')
+AUTOSTART_DIR = os.path.join(XDG_CONFIG_HOME, 'autostart')
+RUNTIME_DIR = os.path.join(XDG_RUNTIME_DIR, 'neomixer')
+DATA_DIR = os.path.join(APP_RUNTIME_DIR, 'data')
+APP_ID = 'org.neomixer.NeoMixer'
 LOG_DIR = os.path.join(XDG_STATE_HOME, 'neomixer')
 LOG_FILE = os.path.join(LOG_DIR, 'neomixer.log')
 
@@ -29,6 +36,7 @@ LOCALE_DIRS = [
     '/usr/share/locale',
     '/usr/local/share/locale',
     os.path.join(APP_RUNTIME_DIR, "locale"),
+    os.path.join(sys.prefix, 'share', 'locale'),
     os.path.join(XDG_DATA_HOME, "locale")
 ]
 
