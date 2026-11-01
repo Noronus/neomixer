@@ -11,7 +11,8 @@ shots=$(realpath -m "${2:-dist/package-tests}")
 run() {
     local distro=$1 image=$2
     mkdir -p "$shots/$distro"
-    podman run --rm -v "$packages:/packages:ro" -v "$PWD/tests:/src/tests:ro" -v "$shots/$distro:/shots" \
+    # Their KWin has the capability to run at a higher priority, and does not start without it
+    podman run --rm --cap-add=SYS_NICE -v "$packages:/packages:ro" -v "$PWD/tests:/src/tests:ro" -v "$shots/$distro:/shots" \
         -v "$PWD/packaging/test-in-container.sh:/test.sh:ro" "$image" bash /test.sh "$distro" 2>&1 \
         | tee "$shots/$distro.log" | grep -E '^(ok |FAIL|===|-->|[0-9]+ of [0-9]+|  FAILED|[0-9]+ passed|.* failed)'
     return "${PIPESTATUS[0]}"

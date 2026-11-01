@@ -20,6 +20,8 @@ check() {
 
 case $distro in
 arch)
+    # Its sandbox for hooks cannot isolate the network in a container without privileges
+    sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf
     pacman -Syu --noconfirm >/dev/null || exit 1
     pacman -U --noconfirm /packages/neomixer-*.pkg.tar.zst || exit 1
     pacman -Qlq neomixer >/tmp/package-files
@@ -37,7 +39,16 @@ fedora)
 esac
 
 echo "=== with nothing but the declared dependencies"
+export XDG_RUNTIME_DIR=/tmp/declared
+install -d -m 700 "$XDG_RUNTIME_DIR"
+pipewire >/dev/null 2>&1 &
+sleep 0.5
+pipewire-pulse >/dev/null 2>&1 &
+sleep 1
 check 'all code imports, GTK and libpulse included' neomixer --help
+kill %1 %2
+wait 2>/dev/null
+unset XDG_RUNTIME_DIR
 for command in pw-cli pw-link pw-dump pw-metadata pw-loopback pipewire pipewire-pulse wireplumber; do
     check "$command is there" command -v "$command"
 done

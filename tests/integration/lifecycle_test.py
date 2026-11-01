@@ -167,7 +167,8 @@ def run_scenario(name, expected, env, shots):
     if errors:
         print('\n'.join(errors))
         print(run.stderr[-3000:])
-    passed = run.returncode == expected and not any(line.startswith('FAIL') for line in lines)
+    # An exception in a callback does not end GTK's main loop, so it does not show in the exit code
+    passed = run.returncode == expected and not any(line.startswith('FAIL') for line in lines) and 'Traceback' not in run.stderr
     print(f'--> {"pass" if passed else f"FAILED (exit {run.returncode})"} in {time.monotonic() - started:.1f}s', flush=True)
     return passed
 

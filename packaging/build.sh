@@ -25,6 +25,8 @@ cp packaging/fedora/neomixer.spec "$work/"
 
 # makepkg refuses to run as root
 podman run --rm -v "$work:/in:ro" -v "$out:/out" "$ARCH_IMAGE" bash -euc '
+    # Its sandbox for hooks cannot isolate the network in a container without privileges
+    sed -i "/^\[options\]/a DisableSandbox" /etc/pacman.conf
     pacman -Syu --noconfirm --needed base-devel python python-babel >/dev/null
     useradd -m builder
     install -d -o builder /home/builder/pkg
