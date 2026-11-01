@@ -32,6 +32,12 @@ class EqControllerTest(unittest.TestCase):
             ('input', 'headset'): ['playback_FL', 'playback_FR'],
             ('output', 'output.nm_eq_music'): ['output_FL', 'output_FR'],
             ('input', 'input.nm_eq_music'): ['input_FL', 'input_FR'],
+            ('output', 'output.nm_eq_headset'): ['output_FL', 'output_FR'],
+            ('input', 'input.nm_eq_headset'): ['playback_FL', 'playback_FR'],
+            ('input', 'bus'): ['input_MONO'],
+            ('output', 'bus'): ['capture_MONO'],
+            ('output', 'output.nm_eq_bus'): ['output_MONO'],
+            ('input', 'input.nm_eq_bus'): ['input_MONO'],
         }
         patches = [
             mock.patch.object(pmctl, 'get_ports', side_effect=lambda t, n: self.ports.get((t, n), [])),
@@ -42,9 +48,10 @@ class EqControllerTest(unittest.TestCase):
             mock.patch.object(pw_eq, 'wait_ready', return_value=True),
             mock.patch.object(pw_eq, 'set_params', return_value=True),
             mock.patch.object(pw_eq, 'running_signature', return_value=None),
+            mock.patch.object(pw_eq, 'wait_linked', return_value=True),
         ]
-        self.get_ports, self.link, _, self.start, self.stop, self.wait_ready, self.set_params, self.running_signature = \
-            [patch.start() for patch in patches]
+        (self.get_ports, self.link, _, self.start, self.stop, self.wait_ready, self.set_params,
+         self.running_signature, self.wait_linked) = [patch.start() for patch in patches]
         self.addCleanup(mock.patch.stopall)
 
         config = ConfigModel()
@@ -53,8 +60,14 @@ class EqControllerTest(unittest.TestCase):
         self.music.connections['a']['1'] = ConnectionModel(
             nick='headset', state=True, input_sel_channels=[True, True], output_sel_channels=[True, True]
         )
+        self.bus = DeviceModel(name='bus', device_type='source', device_class='virtual', primary=False, channels=1,
+                               channel_list=['MONO'], selected_channels=[True])
+        self.music.connections['b']['1'] = ConnectionModel(
+            nick='bus', state=False, input_sel_channels=[True, True], output_sel_channels=[True]
+        )
         config.devices['vi']['1'] = self.music
         config.devices['a']['1'] = self.headset
+        config.devices['b']['1'] = self.bus
 
         self.controller = DeviceController.__new__(DeviceController)
         SignalModel.__init__(self.controller)
@@ -166,6 +179,75 @@ class EqControllerTest(unittest.TestCase):
         self.controller.set_eq('vi', '1')
         self.assertNotIn('music', self.controller._running_eqs)
         self.link.assert_not_called()
+
+    def test_hardware_output_gets_a_smart_filter(self):
+        self.headset.eq.enabled = True
+        self.controller.set_eq('a', '1')
+        self.start.assert_called_once_with('headset', ['FL', 'FR'], self.headset.eq, True)
+
+        # the routes play into it, and the session manager links it to the device
+        links = self.links()
+        self.assertIn(('music:monitor_FL', 'headset:playback_FL', False), links)
+        self.assertIn(('music:monitor_FL', 'input.nm_eq_headset:playback_FL', True), links)
+        self.assertNotIn(('output.nm_eq_headset:output_FL', 'headset:playback_FL', True), links)
+
+    def test_smart_filter_is_linked_by_hand_if_the_session_manager_does_not(self):
+        self.wait_linked.return_value = False
+        self.headset.eq.enabled = True
+        self.controller.set_eq('a', '1')
+        self.assertIn(('output.nm_eq_headset:output_FL', 'headset:playback_FL', True), self.links())
+
+    def test_virtual_output_gets_its_eq_linked_by_hand(self):
+        self.music.connections['b']['1'].state = True
+        self.bus.eq.enabled = True
+        self.controller.set_eq('b', '1')
+        self.start.assert_called_once_with('bus', ['MONO'], self.bus.eq, False)
+        self.wait_linked.assert_not_called()
+        links = self.links()
+        self.assertIn(('output.nm_eq_bus:output_MONO', 'bus:input_MONO', True), links)
+        self.assertIn(('music:monitor_FL', 'input.nm_eq_bus:input_MONO', True), links)
+
+    def test_eq_on_both_ends_of_a_route(self):
+        self.music.eq.enabled = True
+        self.headset.eq.enabled = True
+        self.controller.set_eq('vi', '1')
+        self.controller.set_eq('a', '1')
+        self.assertEqual(self.links()[-2:], [
+            ('output.nm_eq_music:output_FL', 'input.nm_eq_headset:playback_FL', True),
+            ('output.nm_eq_music:output_FR', 'input.nm_eq_headset:playback_FR', True),
+        ])
+
+    def test_unplugged_output_loses_its_eq_and_gets_a_new_one_when_back(self):
+        self.headset.eq.enabled = True
+        self.controller.set_eq('a', '1')
+        self.start.reset_mock()
+
+        self.controller.handle_unplug('a', '1')
+        self.assertNotIn('headset', self.controller._running_eqs)
+        self.controller.handle_hotplug('a', '1')
+        self.start.assert_called_once()
+        self.assertIn('headset', self.controller._running_eqs)
+
+    def test_input_keeps_its_eq_through_an_unplug(self):
+        self.music.eq.enabled = True
+        self.controller.set_eq('vi', '1')
+        self.controller.handle_unplug('vi', '1')
+        self.assertIn('music', self.controller._running_eqs)
+
+    def test_eq_whose_nodes_are_gone_is_started_again(self):
+        self.music.eq.enabled = True
+        self.controller.set_eq('vi', '1')
+        self.start.reset_mock()
+        self.wait_ready.side_effect = [False, True]
+        self.controller._setup_eq(self.music)
+        self.start.assert_called_once()
+
+    def test_failed_link_warning_names_the_channels_of_the_devices(self):
+        self.headset.eq.enabled = True
+        self.controller.set_eq('a', '1')
+        self.link.side_effect = lambda source, target, state=True: 'playback_FR' not in target
+        self.controller.set_connection('vi', '1', 'a', '1', True, soft=True)
+        self.assertEqual(self.music.connections['a']['1'].failed_pairs, ['monitor_FR -> playback_FR'])
 
     def test_loopback_route_records_from_the_eq(self):
         self.controller._running_eqs['music'] = RunningEq(None, 'sig', ['FL', 'FR'])

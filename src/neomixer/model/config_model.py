@@ -30,6 +30,7 @@ class ConfigModel(BaseModel):
     background: bool = True  # keep running after closing the window, to keep routing new app streams
     show_offline_apps: bool = True
     apps_filter: str = 'all'
+    text_size: float = 9.0  # in points, on the monitor: see clients.gtk.text_size
     window_width: int = 1500
     window_height: int = 860
     mixer_height: int = 0  # height of the mixer above the apps, 0 until the divider was moved

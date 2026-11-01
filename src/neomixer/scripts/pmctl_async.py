@@ -42,7 +42,8 @@ async def get_app_by_id(app_type, app_index: int, pulse):
     except pulsectl.PulseIndexError:
         return None
 
-    app.device_name = device.name
+    # the output a stream was put on, also with an EQ in front of it, see pmctl.device_behind_filter
+    app.device_name = device.proplist.get('neomixer.eq.device', device.name)
 
     if not is_app_stream(app.proplist, app.name):
         return None

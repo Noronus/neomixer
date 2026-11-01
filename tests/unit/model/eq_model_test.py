@@ -84,6 +84,28 @@ def test_signature_only_changes_for_what_needs_a_rebuild():
     assert pw_eq.signature(['FL', 'FR'], eq) != signature
 
 
+def test_connection_kind_needs_a_rebuild():
+    eq = EqModel()
+    assert pw_eq.signature(['FL'], eq, True) != pw_eq.signature(['FL'], eq, False)
+
+
+def test_smart_filter_config_takes_the_streams_of_its_device():
+    config = pw_eq.build_config('alsa_output.headset', ['FL', 'FR'], EqModel(), smart=True)
+    assert 'filter.smart.target = { node.name = "alsa_output.headset" }' in config
+    assert 'neomixer.eq.device = "alsa_output.headset"' in config
+    assert 'media.class = Audio/Sink' in config
+    assert 'node.dont-fallback = true' in config
+    assert 'node.autoconnect' not in config
+    assert config.count('node.passive = true') == 2
+
+
+def test_hand_linked_config_stays_out_of_the_session_managers_way():
+    config = pw_eq.build_config('in1', ['FL', 'FR'], EqModel())
+    assert 'filter.smart' not in config
+    assert 'media.class' not in config
+    assert config.count('node.autoconnect = false') == 2
+
+
 def test_params_of_a_disabled_eq_pass_everything_through():
     eq = EqModel(enabled=False, preamp=-6, bands=[
         EqBand(type='peak', gain=9), EqBand(type='lowpass', freq=200), EqBand(type='highpass', freq=200), EqBand(type='notch', freq=200),

@@ -60,7 +60,7 @@ def default_bands() -> list[EqBand]:
 
 class EqModel(BaseModel):
     '''
-    Parametric EQ of an input device. Only the running filter's parameters change when
+    Parametric EQ of a device. Only the running filter's parameters change when
     "enabled" goes off, so that comparing with and without is instant.
     '''
     enabled: bool = False

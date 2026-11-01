@@ -41,7 +41,7 @@ GUIDE_SECTIONS = [
     ),
     (
         _('Equalizer'),
-        _('The EQ button on an input opens its parametric equalizer. Drag a band on the curve '
+        _('The EQ button on any strip opens its parametric equalizer. Drag a band on the curve '
           'to change its frequency and gain, scroll to change its width. Switching it off passes '
           'the audio through unchanged, so you can compare. Right clicking the EQ button does '
           'that without opening the window.')

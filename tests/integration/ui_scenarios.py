@@ -462,6 +462,295 @@ def close_keeps_running(d):
     d.check(window.get_visible() is True, 'and show it')
 
 
+def _labels(widget):
+    '''Every label in a widget tree, popovers included.'''
+    from gi.repository import Gtk
+    if isinstance(widget, Gtk.Label):
+        yield widget
+    child = widget.get_first_child()
+    while child is not None:
+        yield from _labels(child)
+        child = child.get_next_sibling()
+
+
+def _font_px(widget):
+    from gi.repository import Pango
+    description = widget.get_pango_context().get_font_description()
+    size = description.get_size() / Pango.SCALE
+    return size if description.get_size_is_absolute() else size * 96 / 72
+
+
+def text_size_setting(d):
+    '''The setting has to reach all text, where themes reset fonts too.'''
+    from neomixer.clients.gtk import text_size
+
+    window = d.app.window
+    d.check(d.app.config_model.text_size == 9.0, 'default text size')
+    # the headless monitors report no size: the fallback
+    expected = text_size.text_px(9, None)
+    d.check(d.ui.text_scaler.px_of(window) == round(expected, 2), f'window at {expected}: {d.ui.text_scaler.px_of(window)}')
+
+    # em sized labels are smaller by design, these are at full size
+    nick = strip(d, 'vi', 'in media').nick_label
+    d.check(abs(_font_px(nick) - expected) < 0.2, f'strip name: {_font_px(nick)}')
+    settings_label = d.content.settings_box.get_first_child().get_first_child()
+
+    d.ui.settings_menu_open(None)
+    box = d.content.settings_box
+    d.check(box.text_size.get_value() == 9.0, 'settings show it')
+    box.text_size.set_value(14)
+    yield 0.3
+    big = text_size.text_px(14, None)
+    d.check(d.app.config_model.text_size == 14, 'setting is saved')
+    d.check(abs(_font_px(nick) - big) < 0.2, f'strip name grows: {_font_px(nick)}')
+    d.check(d.content.text_factor > 1.3, f'cards grow along: {d.content.text_factor}')
+
+    # all text, nothing left at the theme's size
+    route = strip(d, 'vi', 'in media').connections_widgets['a'].widgets['1']
+    too_small = [label.get_label() for label in _labels(d.app.window)
+                 if _font_px(label) < big * 0.6]
+    d.check(not too_small, f'nothing kept the old size: {too_small[:5]}')
+    route.popover.popup()
+    route._on_pressed(None, None, None, None)
+    yield 0.2
+    d.shot('text_big_route', route.popover)
+    route.popover.popdown()
+
+    d.ui.open_eq_window(None, 'vi', '2')
+    yield 0.5
+    eq = d.ui.eq_windows[('vi', '2')]
+    d.check(abs(eq.curve.text_factor - d.content.text_factor) < 0.01, 'curve labels grow')
+    too_small = [label.get_label() for label in _labels(eq) if _font_px(label) < big * 0.6]
+    d.check(not too_small, f'nothing in the EQ window kept the old size: {too_small[:5]}')
+    d.shot('text_big_eq', eq)
+    eq.close()
+    d.shot('text_big')
+
+    # popovers get their style once they open
+    popover = d.content.settings_button.get_popover()
+    popover.popup()
+    yield 0.3
+    d.check(abs(_font_px(settings_label) - big) < 0.2, f'popover grows: {_font_px(settings_label)}')
+    d.shot('text_big_settings', popover)
+    popover.popdown()
+
+    box.text_size.set_value(6.5)
+    yield 0.4
+    d.shot('text_small')
+    box.text_size.set_value(9)
+    yield 0.3
+    d.check(abs(_font_px(nick) - expected) < 0.2, f'and back: {_font_px(nick)}')
+
+
+def text_follows_the_monitor(d):
+    '''Moved to a monitor of another resolution, a window keeps the physical size of its text.'''
+    import os
+    import subprocess
+    import tempfile
+    from gi.repository import Gdk
+    from neomixer.clients.gtk import text_size
+
+    monitors = Gdk.Display.get_default().get_monitors()
+    d.check(monitors.get_n_items() == 2, f'two monitors: {monitors.get_n_items()}')
+    connectors = [monitors.get_item(index).get_connector() for index in range(monitors.get_n_items())]
+
+    # the headless monitors have no size, so give them the ones of a 27" 1440p and a 24" 1200p
+    dpis = dict(zip(connectors, (108.9, 94.1)))
+    text_size.monitor_dpi = lambda monitor: dpis[monitor.get_connector()]
+    d.ui.text_scaler.update()
+    yield 0.2
+
+    def move_to(index):
+        script = (
+            'var w = workspace.windowList().filter(function (c) { return c.caption == "NeoMixer"; })[0];'
+            f'workspace.sendClientToScreen(w, workspace.screens[{index}]);'
+        )
+        with tempfile.NamedTemporaryFile('w', suffix='.js', delete=False) as out:
+            out.write(script)
+        bus = ['gdbus', 'call', '--session', '--dest', 'org.kde.KWin']
+        loaded = subprocess.run(
+            [*bus, '--object-path', '/Scripting', '--method', 'org.kde.kwin.Scripting.loadScript', out.name, f'move{index}'],
+            capture_output=True, text=True, check=False
+        ).stdout
+        script_id = loaded.strip().strip('(),').split()[-1]
+        subprocess.run(
+            [*bus, '--object-path', f'/Scripting/Script{script_id}', '--method', 'org.kde.kwin.Script.run'],
+            capture_output=True, check=False
+        )
+        subprocess.run(
+            [*bus, '--object-path', '/Scripting', '--method', 'org.kde.kwin.Scripting.unloadScript', f'move{index}'],
+            capture_output=True, check=False
+        )
+        os.unlink(out.name)
+
+    window = d.app.window
+    on_monitor = lambda: Gdk.Display.get_default().get_monitor_at_surface(window.get_surface()).get_connector()
+    start = on_monitor()
+    other = next(index for index, connector in enumerate(connectors) if connector != start)
+    expected_here = round(text_size.text_px(9, dpis[start]), 2)
+    d.check(d.ui.text_scaler.px_of(window) == expected_here, f'on {start}: {d.ui.text_scaler.px_of(window)}')
+
+    move_to(other)
+    yield 1.0
+    d.check(on_monitor() == connectors[other], f'window moved: {on_monitor()}')
+    expected_there = round(text_size.text_px(9, dpis[connectors[other]]), 2)
+    d.check(d.ui.text_scaler.px_of(window) == expected_there, f'text follows: {d.ui.text_scaler.px_of(window)}, wanted {expected_there}')
+    nick = strip(d, 'vi', 'in media').nick_label
+    d.check(abs(_font_px(nick) - expected_there) < 0.2, f'and is drawn so: {_font_px(nick)}')
+
+    # hidden and shown again, as the tray does
+    d.ui.hide_window()
+    yield 0.3
+    d.ui.show_window()
+    yield 0.6
+    d.check(window.get_visible(), 'shows again')
+    d.check(d.ui.text_scaler.px_of(window) in (expected_here, expected_there), f'still sized: {d.ui.text_scaler.px_of(window)}')
+    move_to(0 if connectors[0] == start else 1)
+    yield 0.6
+
+
+def _measure_at_device(device, play_args, freq=1000, seconds=0.9):
+    '''What really reaches a device, with a recorder linked by hand to its monitor ports.'''
+    import math
+    import os
+    import signal
+    import subprocess
+    import tempfile
+    import time
+    from neomixer.scripts import pmctl
+    from tests.integration.audio_probe import _tone_magnitude, _write_sine, AMPLITUDE
+
+    with tempfile.TemporaryDirectory() as folder:
+        tone, recording = os.path.join(folder, 'tone.wav'), os.path.join(folder, 'out.wav')
+        _write_sine(tone, freq, seconds + 1.5)
+        recorder = subprocess.Popen(
+            ['pw-record', '-P', '{ node.name=nmprobe node.autoconnect=false }', '--rate', '48000', '--channels', '2',
+             '--format', 's16', recording], stderr=subprocess.DEVNULL
+        )
+        time.sleep(0.25)
+        for channel in ('FL', 'FR'):
+            pmctl.link(f'{device}:monitor_{channel}', f'nmprobe:input_{channel}')
+        player = subprocess.Popen(['pw-play', *play_args, tone], stderr=subprocess.DEVNULL)
+        time.sleep(0.45 + seconds)
+        recorder.send_signal(signal.SIGINT)
+        recorder.wait()
+        player.terminate()
+        player.wait()
+        magnitude = _tone_magnitude(recording, freq, 0.55)
+    return None if magnitude < 1e-5 else 20 * math.log10(magnitude / AMPLITUDE)
+
+
+def _set_band(d, device_type, device_id, gain):
+    d.ui.open_eq_window(None, device_type, device_id)
+    window = d.ui.eq_windows[(device_type, device_id)]
+    window.eq.reset()
+    window.eq.enabled = True
+    window.selected = 3
+    window.eq.bands[3].freq = 1000
+    window.eq.bands[3].gain = gain
+    window._edited()
+    return window
+
+
+def output_eq(d):
+    '''EQ on an output: routed inputs and programs playing straight into it all go through.'''
+    import subprocess
+    from neomixer.scripts import pmctl, pw_eq
+    from tests.integration.ui_driver import create_null_sink, links, stream_device
+
+    media = strip(d, 'vi', 'in media')
+    media.volume_widget.set_value(100)
+    headset = strip(d, 'a', 'headset')
+    d.check(headset.eq_button.get_parent() is not None, 'hardware outputs have an EQ button')
+    d.check(strip(d, 'b', 'mic1').eq_button.get_parent() is not None, 'virtual outputs too')
+    yield 0.2
+
+    before = _measure_at_device(HEADSET, ['--target', 'inmedia'])
+    direct_before = _measure_at_device(HEADSET, ['--target', HEADSET])
+    d.check(before is not None and abs(before) < 0.5, f'route without EQ is flat: {before}')
+
+    window = _set_band(d, 'a', '1', 9)
+    yield 1.2
+    d.check(bool(pw_eq.running_pids(HEADSET)), 'EQ runs')
+    linked = links()
+    d.check(('inmedia:monitor_FL', f'input.nm_eq_{HEADSET}:playback_FL') in pmctl.get_links('inmedia'), 'routes play into it')
+    d.check(f'output.nm_eq_{HEADSET}:output_FL\n  |-> {HEADSET}:playback_FL' in linked, 'the session manager links it to the device')
+
+    routed = _measure_at_device(HEADSET, ['--target', 'inmedia'])
+    d.check(routed is not None and abs(routed - 9) < 0.7, f'routed input gets +9 dB: {routed}')
+    direct = _measure_at_device(HEADSET, ['--target', HEADSET])
+    d.check(direct is not None and abs(direct - direct_before - 9) < 0.7, f'program on the output gets +9 dB: {direct}')
+
+    subprocess.run(['pactl', 'set-default-sink', HEADSET], check=False)
+    yield 0.3
+    default = _measure_at_device(HEADSET, [])
+    d.check(default is not None and abs(default - 9) < 0.7, f'program following the default gets +9 dB: {default}')
+    d.check(subprocess.check_output(['pactl', 'get-default-sink'], text=True).strip() == HEADSET, 'default device stays the device')
+
+    # what the app shows
+    d.check(not [device.name for device in d.ui.list_devices('a') if 'nm_eq_' in device.name], 'the EQ is not offered as a device')
+    player = d.play('Firefox', binary='firefox', freq=330)
+    card = d.card('firefox')
+    select_device(card, HEADSET)
+    yield 0.8
+    d.check(stream_device('Firefox') in (HEADSET, f'input.nm_eq_{HEADSET}'), f'program goes to it: {stream_device("Firefox")}')
+    d.check(card.entry.device == HEADSET, f'and shows the output, not its EQ: {card.entry.device}')
+    d.check(list(card.entry.streams.values())[0].device == HEADSET, 'also on the stream')
+    yield 2.5  # past the time a stream is being placed
+    d.check(card.entry.known.device == HEADSET, 'the choice stays')
+    select_device(card, 'inmedia')
+    yield 0.5
+    player.stop()
+
+    # comparing
+    window.enable_switch.set_active(False)
+    yield 0.3
+    off = _measure_at_device(HEADSET, ['--target', 'inmedia'])
+    d.check(off is not None and abs(off) < 0.5, f'off passes through: {off}')
+    window.enable_switch.set_active(True)
+    yield 0.3
+
+    # with an input's EQ in the same route, both count
+    input_window = _set_band(d, 'vi', '2', 6)
+    yield 1.0
+    both = _measure_at_device(HEADSET, ['--target', 'inmedia'])
+    d.check(both is not None and abs(both - 15) < 0.7, f'input and output EQ add up to +15 dB: {both}')
+    input_window.eq.reset()
+    input_window.eq.enabled = False
+    input_window._edited()
+    yield 0.4
+
+    # unplugged the EQ must not make routed audio come out of another device
+    other = 'alsa_output.test_card.analog-stereo'
+    subprocess.run(['pw-cli', 'destroy', HEADSET], check=False, stdout=subprocess.DEVNULL)
+    yield 1.0
+    d.check(headset.device_model.present is False, 'output is unplugged')
+    d.check(f'output.nm_eq_{HEADSET}' not in links(), 'its EQ is gone with it')
+    d.check(not pw_eq.running_pids(HEADSET), 'no process is left')
+
+    create_null_sink(HEADSET)
+    yield 1.5
+    d.check(headset.device_model.present is True, 'output is back')
+    back = _measure_at_device(HEADSET, ['--target', 'inmedia'])
+    d.check(back is not None and abs(back - 9) < 0.7, f'with its EQ: {back}')
+
+    # virtual output: only routes reach it, recorded by a program
+    bus_window = _set_band(d, 'b', '1', 9)
+    yield 1.0
+    linked = links()
+    d.check('output.nm_eq_mic1:output_MONO\n  |-> mic1:input_MONO' in linked, 'virtual output has its EQ linked')
+    d.check('input.nm_eq_mic1:input_MONO' in linked, 'and routes play into it')
+    d.shot('eq_on_outputs')
+
+    # switched off for the next runs
+    for key in (('a', '1'), ('b', '1')):
+        eq_window = d.ui.eq_windows[key]
+        eq_window.eq.reset()
+        eq_window.eq.enabled = False
+        eq_window._edited()
+    yield 0.3
+
+
 def tray_is_on_the_bus(d):
     '''Talks to the tray icon the way a desktop panel does.'''
     import subprocess
@@ -673,3 +962,122 @@ def starts_hidden(d):
     d.stop_players()
     d.app.config_model.background = True
     yield 0.1
+
+
+def live_check(d):
+    '''
+    For a real desktop, not part of the suite: real monitors, the real theme and a real output.
+    The EQ stays flat, nothing audible changes, and every setting ends as it started.
+    '''
+    import json
+    import subprocess
+    from gi.repository import Gdk, Gtk
+    from neomixer.clients.gtk import text_size
+    from neomixer.scripts import pmctl, pw_eq
+    from tests.integration.ui_driver import links
+
+    window = d.app.window
+    scaler = d.ui.text_scaler
+    points = d.app.config_model.text_size
+    monitors = Gdk.Display.get_default().get_monitors()
+    for index in range(monitors.get_n_items()):
+        monitor = monitors.get_item(index)
+        dpi = text_size.monitor_dpi(monitor)
+        print(f'monitor {monitor.get_connector()} {monitor.get_model()}: {dpi:.1f} dpi, {points} pt is '
+              f'{text_size.text_px(points, dpi):.2f} px, {text_size.text_px(points, dpi) / dpi * 25.4:.2f} mm')
+
+    yield 1.0
+    here = Gdk.Display.get_default().get_monitor_at_surface(window.get_surface())
+    expected = round(text_size.text_px(points, text_size.monitor_dpi(here)), 2)
+    d.check(scaler.px_of(window) == expected, f'window on {here.get_connector()} has {scaler.px_of(window)} px')
+    nick = next(iter(d.content.device_box['vi'].widgets.values())).nick_label
+    d.check(abs(_font_px(nick) - expected) < 0.2, f'drawn so with the theme {Gtk.Settings.get_default().get_property("gtk-theme-name")}: {_font_px(nick)}')
+    d.shot('live_main')
+
+    # a setting reaches all text in the real theme
+    box = d.content.settings_box
+    d.ui.settings_menu_open(None)
+    popover = d.content.settings_button.get_popover()
+    popover.popup()
+    box.text_size.set_value(points + 4)
+    yield 0.4
+    big = scaler.px_of(window)
+    too_small = [label.get_label() for label in _labels(window) if label.get_mapped() and _font_px(label) < big * 0.6]
+    d.check(not too_small, f'all text follows the setting: {too_small[:5]}')
+    settings_label = box.get_first_child().get_first_child()
+    d.check(abs(_font_px(settings_label) - big) < 0.2, f'popover too: {_font_px(settings_label)} of {big}')
+    d.shot('live_settings', popover)
+    box.text_size.set_value(points)
+    popover.popdown()
+    yield 0.3
+
+    # a real move to the other monitor
+    other_index = next(i for i in range(monitors.get_n_items()) if monitors.get_item(i).get_connector() != here.get_connector())
+    other = monitors.get_item(other_index)
+    script = (
+        'var w = workspace.windowList().filter(function (c) { return c.caption == "NeoMixer"; })[0];'
+        'var o = workspace.screens.filter(function (s) { return s.name == "%s"; })[0];'
+        'workspace.sendClientToScreen(w, o);'
+    )
+
+    def move_to(connector):
+        import os
+        import tempfile
+        with tempfile.NamedTemporaryFile('w', suffix='.js', delete=False) as out:
+            out.write(script % connector)
+        bus = ['gdbus', 'call', '--session', '--dest', 'org.kde.KWin']
+        loaded = subprocess.run([*bus, '--object-path', '/Scripting', '--method', 'org.kde.kwin.Scripting.loadScript', out.name, 'neomixer-check'],
+                                capture_output=True, text=True, check=False).stdout
+        script_id = loaded.strip().strip('(),').split()[-1]
+        subprocess.run([*bus, '--object-path', f'/Scripting/Script{script_id}', '--method', 'org.kde.kwin.Script.run'], capture_output=True, check=False)
+        subprocess.run([*bus, '--object-path', '/Scripting', '--method', 'org.kde.kwin.Scripting.unloadScript', 'neomixer-check'], capture_output=True, check=False)
+        os.unlink(out.name)
+
+    start_connector = here.get_connector()
+    move_to(other.get_connector())
+    yield 1.2
+    now = Gdk.Display.get_default().get_monitor_at_surface(window.get_surface())
+    d.check(now.get_connector() == other.get_connector(), f'moved to {now.get_connector()}')
+    wanted = round(text_size.text_px(points, text_size.monitor_dpi(other)), 2)
+    d.check(scaler.px_of(window) == wanted, f'text follows: {scaler.px_of(window)} px, wanted {wanted}')
+    d.check(abs(_font_px(nick) - wanted) < 0.2, f'drawn so: {_font_px(nick)}')
+    d.shot('live_other_monitor')
+    move_to(start_connector)
+    yield 1.0
+
+    # a flat EQ on the output that is playing
+    sinks = json.loads(subprocess.check_output(['pactl', '-f', 'json', 'list', 'sinks'], text=True))
+    state = {sink['name']: sink['state'] for sink in sinks}
+    outputs = d.app.device_repository.get_devices_by_type('a')
+    device_id, device = next(((key, dev) for key, dev in outputs.items() if state.get(dev.name) == 'RUNNING'),
+                             next(((key, dev) for key, dev in outputs.items() if dev.present), (None, None)))
+    print('output under test:', device.nick, device.name, state.get(device.name))
+    was_enabled = device.eq.enabled
+    if was_enabled:
+        print('it already has an EQ on, not touching it')
+        return
+
+    device.eq.enabled = True
+    d.ui._on_eq_window_changed(None, 'a', device_id)
+    yield 1.5
+    capture, playback = pw_eq.eq_nodes(device.name)
+    d.check(bool(pw_eq.running_pids(device.name)), 'EQ process runs')
+    d.check(any(target.startswith(f'{device.name}:') for _source, target in pmctl.get_links(playback)), 'WirePlumber linked it to the real device')
+    d.check(pmctl.get_device_by_name('sink', capture) is not None, 'it exists as a filter sink')
+    default = subprocess.check_output(['pactl', 'get-default-sink'], text=True).strip()
+    d.check(not default.startswith('input.nm_eq_'), f'default device untouched: {default}')
+    d.check(not [dev.name for dev in d.ui.list_devices('a') if 'nm_eq_' in dev.name], 'not offered as a device')
+    sinks = json.loads(subprocess.check_output(['pactl', '-f', 'json', 'list', 'sinks'], text=True))
+    filter_sink = next(sink for sink in sinks if sink['name'] == capture)
+    print('filter sink flags:', filter_sink.get('flags'), '| description:', filter_sink.get('description'), '| state', filter_sink['state'])
+    linked = links()
+    print('into the filter:', linked.count(f'-> {capture}:'))
+    for app_type, entries in d.app.app_registry.entries.items():
+        for entry in entries.values():
+            for stream in entry.streams.values():
+                print(f'  stream {entry.label}: {stream.device}')
+    print(subprocess.check_output(['pw-top', '-b', '-n', '2'], text=True)[-900:])
+
+    device.eq.enabled = False
+    d.ui._on_eq_window_changed(None, 'a', device_id)
+    yield 0.3

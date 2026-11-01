@@ -14,7 +14,7 @@ LOG = logging.getLogger("generic")
 
 @dataclass
 class RunningEq:
-    '''The filter chain running for an input device. "process" is None if an earlier run started it.'''
+    '''The filter chain running for a device. "process" is None if an earlier run started it.'''
     process: subprocess.Popen | None
     signature: str
     positions: list[str]
@@ -84,7 +84,7 @@ class DeviceController(SignalModel):
                 if device.present:
                     self._restore_device_state(device)
 
-        for device_type in ('vi', 'hi'):
+        for device_type in ('vi', 'hi', 'a', 'b'):
             for device_id, device in self.device_repository.get_devices_by_type(device_type).items():
                 try:
                     self._setup_eq(device)
@@ -216,8 +216,7 @@ class DeviceController(SignalModel):
         if device.device_class == 'virtual' and not device.external:
             self._restore_device_state(device)
 
-        if device.get_type() in ('vi', 'hi'):
-            self._setup_eq(device)
+        self._setup_eq(device)
 
     def handle_unplug(self, device_type: str, device_id: str):
         """
@@ -228,6 +227,10 @@ class DeviceController(SignalModel):
         """
         device = self.device_repository.get_device(device_type, device_id)
         device.present = False
+
+        # The session manager already removed its nodes, the next plug gets a new one
+        if self._uses_smart_filter(device) and device.name in self._running_eqs:
+            self._stop_eq(device)
 
     def reconnect(self, device_type: str, device_id: str):
         '''
@@ -282,8 +285,7 @@ class DeviceController(SignalModel):
             if self._try_init_device(device_type, device_id, "Failed to init %s/%s on update") and device.primary:
                 pmctl.set_primary(device.device_type, device.name)
 
-        if device_type in ('vi', 'hi'):
-            self._setup_eq(device)
+        self._setup_eq(device)
 
         self.reconnect(device_type, device_id)
 
@@ -307,9 +309,9 @@ class DeviceController(SignalModel):
             pmctl.destroy_loopback(proc)
         self._loopback_procs.clear()
 
-        for input_type in ('vi', 'hi'):
-            for input_device in self.device_repository.get_devices_by_type(input_type).values():
-                self._stop_eq(input_device)
+        for device_list in self.device_repository.get_all_devices().values():
+            for device in device_list.values():
+                self._stop_eq(device)
 
         device_dict = self.device_repository.get_all_devices()
         for _, device_list in device_dict.items():
@@ -448,26 +450,27 @@ class DeviceController(SignalModel):
             output_channels = output_device.get_selected_channels(output_ports)
             port_map = connection_model.str_port_map(input_channels, output_channels)
 
-            # The EQ and the loopback carry each input channel on its port of the same index, so the map applies as it is
+            # EQs and the loopback carry each channel on its port of the same index, so the map applies as it is
             source_name, source_ports = self._route_source(input_device, input_ports)
             if loopback_name is not None:
                 source_name = pmctl.loopback_nodes(loopback_name)[1]
                 source_ports = pmctl.get_ports('output', source_name)
+            target_name, target_ports = self._route_target(output_device, output_ports)
 
             # An edit while a device has no ports only saves, its device widget already shows it is gone
-            if previous is not None and not (source_ports and output_ports):
+            if previous is not None and not (source_ports and target_ports):
                 return
 
             # Relinking a pair that is already linked is a no-op, so only the removed pairs need unlinking
             if previous is not None:
                 pmctl.link_channels(
-                    source_name, output_device.name,
+                    source_name, target_name,
                     removed_pairs(previous.str_port_map(input_channels, output_channels), port_map), False,
-                    input_ports=source_ports, output_ports=output_ports
+                    input_ports=source_ports, output_ports=target_ports
                 )
 
             if loopback_name is not None and state:
-                self._unlink_stale_loopback_links(source_name, source_ports, output_device.name, output_ports, port_map)
+                self._unlink_stale_loopback_links(source_name, source_ports, target_name, target_ports, port_map)
 
             # A manual map whose channels are all gone links nothing, which pmctl would report as success
             manual_links = not connection_model.auto_ports and any(connection_model.port_map)
@@ -479,17 +482,17 @@ class DeviceController(SignalModel):
                 return
 
             unlinked = pmctl.link_channels(
-                source_name, output_device.name, port_map, state,
-                input_ports=source_ports, output_ports=output_ports
+                source_name, target_name, port_map, state,
+                input_ports=source_ports, output_ports=target_ports
             )
 
-            # Warnings name the input's own channel, not the port carrying it
-            if source_name != input_device.name:
-                input_port_of = dict(zip(source_ports, input_ports))
-                unlinked = [
-                    input_port_of.get(source, source) + arrow + target
-                    for source, arrow, target in (pair.partition(' -> ') for pair in unlinked)
-                ]
+            # Warnings name the devices' own channels, not the ports carrying them
+            input_port_of = dict(zip(source_ports, input_ports))
+            output_port_of = dict(zip(target_ports, output_ports))
+            unlinked = [
+                input_port_of.get(source, source) + arrow + output_port_of.get(target, target)
+                for source, arrow, target in (pair.partition(' -> ') for pair in unlinked)
+            ]
 
             if state:
                 connection_model.connect_failed = False
@@ -613,6 +616,18 @@ class DeviceController(SignalModel):
     #
     # # EQ
     #
+    @staticmethod
+    def _is_output(device):
+        return device.get_type() in ('a', 'b')
+
+    @staticmethod
+    def _uses_smart_filter(device):
+        '''
+        Programs can play straight into a hardware output, only the session manager can put
+        those through its EQ. Everything reaches the other devices through their routes.
+        '''
+        return device.get_type() == 'a'
+
     def _route_source(self, input_device, input_ports):
         '''
         The node a device's routes play from, with its ports: the device, or its EQ if running
@@ -622,6 +637,16 @@ class DeviceController(SignalModel):
 
         playback = pw_eq.eq_nodes(input_device.name)[1]
         return playback, pmctl.get_ports('output', playback)
+
+    def _route_target(self, output_device, output_ports):
+        '''
+        The node routes to a device play into, with its ports: the device, or its EQ if running
+        '''
+        if output_device.name not in self._running_eqs:
+            return output_device.name, output_ports
+
+        capture = pw_eq.eq_nodes(output_device.name)[0]
+        return capture, pmctl.get_ports('input', capture)
 
     def set_eq(self, device_type, device_id):
         '''
@@ -637,7 +662,7 @@ class DeviceController(SignalModel):
                 self._insert_eq(device_type, device_id, device)
             return
 
-        if pw_eq.signature(running.positions, device.eq) == running.signature:
+        if pw_eq.signature(running.positions, device.eq, self._uses_smart_filter(device)) == running.signature:
             pw_eq.set_params(device.name, device.eq)
             return
 
@@ -657,16 +682,35 @@ class DeviceController(SignalModel):
         self.reconnect(device_type, device_id)
 
     def _unlink_routes(self, device_type, device_id, device):
-        for output_type, connections in device.connections.items():
-            for output_id, connection in connections.items():
-                if connection.state:
-                    self.set_connection(device_type, device_id, output_type, output_id, False, soft=True)
+        '''Unlink the active routes of an input or an output, to link them again differently.'''
+        if not self._is_output(device):
+            for output_type, connections in device.connections.items():
+                for output_id, connection in connections.items():
+                    if connection.state:
+                        self.set_connection(device_type, device_id, output_type, output_id, False, soft=True)
+            return
+
+        for input_type in ('vi', 'hi'):
+            for input_id, input_device in self.device_repository.get_devices_by_type(input_type).items():
+                connection = input_device.connections[device_type].get(device_id)
+                if connection is not None and connection.state:
+                    self.set_connection(input_type, input_id, device_type, device_id, False, soft=True)
+
+    def _eq_ports(self, device):
+        '''The ports of a device its EQ attaches to.'''
+        try:
+            return pmctl.get_ports('input' if self._is_output(device) else 'output', device.name)
+        except RuntimeError:
+            return []
 
     def _setup_eq(self, device):
-        '''Have the EQ a device's settings ask for running and fed, before its routes get linked.'''
-        if device.name in self._running_eqs:
-            self._link_eq_input(device)
-            return
+        '''Have the EQ a device's settings ask for running and connected, before its routes get linked.'''
+        running = self._running_eqs.get(device.name)
+        if running is not None:
+            if pw_eq.wait_ready(device.name, len(running.positions), timeout=0.2):
+                self._connect_eq(device)
+                return
+            self._stop_eq(device)
 
         if device.eq.enabled:
             self._start_eq(device)
@@ -676,44 +720,48 @@ class DeviceController(SignalModel):
 
     def _start_eq(self, device):
         '''
-        Start a device's EQ and feed it from the device, or take over a matching one from an
+        Start a device's EQ and connect it to the device, or take over a matching one from an
         earlier run. That one keeps playing, a restart of NeoMixer is not audible.
         '''
-        try:
-            ports = pmctl.get_ports('output', device.name)
-        except RuntimeError:
-            ports = []
-
+        ports = self._eq_ports(device)
         if not ports:
             LOG.warning('%s has no ports, not starting its EQ for now', device.name)
             return False
 
         positions = [port_position(port) for port in ports]
-        signature = pw_eq.signature(positions, device.eq)
+        smart = self._uses_smart_filter(device)
+        signature = pw_eq.signature(positions, device.eq, smart)
         process = None
         adopted = pw_eq.running_signature(device.name) == signature and pw_eq.wait_ready(device.name, len(ports), timeout=0.2)
         if adopted:
             pw_eq.set_params(device.name, device.eq)
         else:
             pw_eq.stop(device.name)
-            process = pw_eq.start(device.name, positions, device.eq)
+            process = pw_eq.start(device.name, positions, device.eq, smart)
             if not pw_eq.wait_ready(device.name, len(ports)):
                 LOG.error('The EQ of %s did not start', device.name)
                 pw_eq.stop(device.name, process)
                 return False
 
         self._running_eqs[device.name] = RunningEq(process, signature, positions)
-        self._link_eq_input(device)
+        self._connect_eq(device)
         return True
 
-    def _link_eq_input(self, device):
-        capture = pw_eq.eq_nodes(device.name)[0]
-        ports = pmctl.get_ports('output', device.name)
+    def _connect_eq(self, device):
+        '''Link an EQ to its device: routes get linked to it the way they were to the device.'''
+        capture, playback = pw_eq.eq_nodes(device.name)
+        ports = self._eq_ports(device)
         channels = ' '.join(f'{index}:{index}' for index in range(len(ports)))
         try:
-            pmctl.link_channels(device.name, capture, channels, input_ports=ports)
+            if not self._is_output(device):
+                pmctl.link_channels(device.name, capture, channels, input_ports=ports)
+                return
+
+            # It is the session manager's to link, by hand only if it does not know smart filters
+            if not self._uses_smart_filter(device) or not pw_eq.wait_linked(device.name):
+                pmctl.link_channels(playback, device.name, channels, output_ports=ports)
         except RuntimeError:
-            LOG.warning('Could not feed the EQ of %s', device.name)
+            LOG.warning('Could not connect the EQ of %s', device.name)
 
     def _stop_eq(self, device):
         running = self._running_eqs.pop(device.name, None)
@@ -905,8 +953,7 @@ class DeviceController(SignalModel):
                 for input_device in self.device_repository.get_devices_by_type(input_type).values():
                     input_device.connections[device_type].pop(device_id)
 
-        if device_type in ('vi', 'hi'):
-            self._stop_eq(device)
+        self._stop_eq(device)
 
         if device.device_class == 'virtual':
             pmctl.remove_device(device.name)

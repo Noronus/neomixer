@@ -16,6 +16,7 @@ from neomixer.model.signal_model import SignalModel
 from neomixer.model.config_model import ConfigModel
 from neomixer.model.device_model import DeviceModel
 
+from neomixer.clients.gtk.text_size import TextScaler
 from neomixer.clients.gtk.widgets.content import Content
 from neomixer.clients.gtk.widgets.device.device_widget import DeviceWidget
 from neomixer.clients.gtk.widgets.app.app_widget import AppWidget
@@ -105,6 +106,7 @@ class GtkController(SignalModel):
         self.window = None
         self.content = None
         self.welcome_window = None
+        self.text_scaler = None
         self.status_label = None
         self.vumeter_tasks = {'a': {}, 'b': {}, 'vi': {}, 'hi': {}}
         self.app_meter_tasks = {}
@@ -124,6 +126,8 @@ class GtkController(SignalModel):
         self.window.set_titlebar(self._build_header())
         self.window.set_default_size(self.config_model.window_width, self.config_model.window_height)
         self.window.set_child(self.content)
+        self.text_scaler = TextScaler(self.config_model.text_size)
+        self.text_scaler.track(self.window, self.content.set_text_factor)
         if self.config_model.mixer_height <= 0:
             self.content.default_split(self.config_model.window_height)
         self.connect_window_gtk_events()
@@ -378,6 +382,8 @@ class GtkController(SignalModel):
         self.config_model.vumeters = config_schema['vumeters']
         self.config_model.cleanup = config_schema['cleanup']
         self.config_model.background = config_schema['background']
+        self.config_model.text_size = config_schema['text_size']
+        self.text_scaler.set_points(config_schema['text_size'])
         autostart.set_enabled(config_schema['autostart'], config_schema['start_hidden'])
         if vumeters_changed:
             if self.config_model.vumeters:
@@ -398,6 +404,7 @@ class GtkController(SignalModel):
             window = EqWindow(device_model, transient_for=self.window)
             window.set_hide_on_close(True)
             window.connect('changed', self._on_eq_window_changed, device_type, device_id)
+            self.text_scaler.track(window, window.set_text_factor)
             self.eq_windows[(device_type, device_id)] = window
         window.present()
 
@@ -430,6 +437,7 @@ class GtkController(SignalModel):
     def _close_eq_window(self, device_type, device_id):
         window = self.eq_windows.pop((device_type, device_id), None)
         if window is not None:
+            self.text_scaler.untrack(window)
             window.destroy()
 
     #
@@ -497,6 +505,7 @@ class GtkController(SignalModel):
         Create and present the welcome window.
         '''
         self.welcome_window = WelcomeWindow(transient_for=self.window)
+        self.text_scaler.track(self.welcome_window)
         self.welcome_window.present()
 
     def connection_settings_hijack(self, device_widget, output_type, output_id, input_type, input_id):

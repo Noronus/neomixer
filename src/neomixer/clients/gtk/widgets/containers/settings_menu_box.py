@@ -1,5 +1,7 @@
 import gettext
 
+from neomixer.clients.gtk.text_size import MIN_POINTS, MAX_POINTS
+
 # pylint: disable=wrong-import-order,wrong-import-position
 import gi
 gi.require_version('Gtk', '4.0')
@@ -51,12 +53,24 @@ class SettingsMenuBox(Gtk.Box):
             _('Remove devices on quit'), _('Enable or disable cleaning up devices and connections upon closing')
         )
 
-        for row in (autostart_row, hidden_row, background_row, vumeters_row, cleanup_row):
+        self.text_size = Gtk.SpinButton.new_with_range(MIN_POINTS, MAX_POINTS, 0.5)
+        self.text_size.set_digits(1)
+        self.text_size.set_numeric(True)
+        self.text_size.set_valign(Gtk.Align.CENTER)
+        text_size_row = Gtk.Box(spacing=12)
+        text_size_row.append(Gtk.Label(label=_('Text size (pt)'), xalign=0, hexpand=True))
+        text_size_row.append(self.text_size)
+        text_size_row.set_tooltip_text(
+            _('The same physical size on every monitor, whatever its resolution, as far as the monitor reports its size')
+        )
+
+        for row in (text_size_row, autostart_row, hidden_row, background_row, vumeters_row, cleanup_row):
             self.append(row)
 
         self.switches = (self.autostart, self.start_hidden, self.background, self.vumeters, self.cleanup)
         for switch in self.switches:
             switch.connect('notify::active', self._on_switched)
+        self.text_size.connect('value-changed', self._on_switched)
 
         self.help_button = Gtk.Button(label=_('Guide'))
         self.help_button.set_tooltip_text(_('Open the welcome guide'))
@@ -74,6 +88,7 @@ class SettingsMenuBox(Gtk.Box):
 
     def fill_settings(self, config_model, autostart_enabled, start_hidden):
         self._filling = True
+        self.text_size.set_value(config_model.text_size)
         self.vumeters.set_active(config_model.vumeters)
         self.cleanup.set_active(config_model.cleanup)
         self.background.set_active(config_model.background)
@@ -84,6 +99,7 @@ class SettingsMenuBox(Gtk.Box):
 
     def to_schema(self):
         return {
+            'text_size': self.text_size.get_value(),
             'vumeters': self.vumeters.get_active(),
             'cleanup': self.cleanup.get_active(),
             'background': self.background.get_active(),

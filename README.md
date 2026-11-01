@@ -16,8 +16,10 @@ Carneiro. It imports your Pulsemeeter config on first start.
 - **Program routing is remembered.** A program's output, input, volume and mute are saved per
   program, and applied whenever its streams appear: on restart, after a reboot, or when the device
   it belongs on comes back.
-- **Equalizer on every input.** Eight parametric bands with a live curve, presets and a preamp.
-  Changes are inaudible to apply, and switching it off is instant, for comparing.
+- **Equalizer on every channel.** Eight parametric bands with a live curve, presets and a preamp, on
+  inputs and outputs. Changes are inaudible to apply, and switching it off is instant, for comparing.
+- **Text size that means something.** Set in points, it comes out the same physical size on every
+  monitor, from the size each monitor reports, and follows the window when it moves to another.
 - **Reboots lose nothing.** Settings are saved as they change, also on SIGTERM. Virtual devices get
   their volume, mute and primary state back. It recovers by itself if the sound server restarts.
 - **A layout that holds up.** Strips share the window width and programs flow into a grid of their
@@ -42,7 +44,7 @@ Quit Pulsemeeter first: both would manage the same devices.
 |---|---|
 | Route an input to an output | Click **A1**, **B1**… on its strip. Right click for channel mapping and a per-route volume |
 | Choose a program's output | The selector on its card. It is remembered |
-| Open an input's EQ | **EQ** on its strip. Right click switches it on or off without opening it |
+| Open a channel's EQ | **EQ** on its strip. Right click switches it on or off without opening it |
 | Edit the EQ | Drag a handle for frequency and gain, scroll for Q, double click to zero the gain |
 | Make a device the system default | **★** on its strip |
 | Quit for real | Settings menu, or the tray icon's menu, or `neomixer quit` |
@@ -57,10 +59,11 @@ Files: `~/.config/neomixer/config.json` and `~/.local/state/neomixer/neomixer.lo
 Virtual devices are PipeWire null sinks, and routes are links between their ports, which is why
 audio does not depend on the app running.
 
-The EQ of an input is a `libpipewire-module-filter-chain` in a process of its own, spliced between
-the device's monitor and its routes. Its nodes are passive, so an EQ never keeps a sound card awake.
-Parameters change through `pw-cli set-param` without touching the audio; only a new filter type
-rebuilds the chain.
+A channel's EQ is a `libpipewire-module-filter-chain` in a process of its own, spliced between the
+device and its routes. Its nodes are passive, so an EQ never keeps a sound card awake. Parameters
+change through `pw-cli set-param` without touching the audio; only a new filter type rebuilds the
+chain. Programs can also play straight into a hardware output, or follow it as the default device.
+That EQ is a WirePlumber smart filter, which takes every stream headed for the device.
 
 Programs are identified by what survives updates: the Flatpak id or process name, not the stream
 name, which is `Factorio 2.1.24` today and `WEBRTC VoiceEngine` for half the internet. A stream's

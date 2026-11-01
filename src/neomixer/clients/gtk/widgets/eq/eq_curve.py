@@ -18,6 +18,7 @@ GRID_GAINS = (-24, -18, -12, -6, 0, 6, 12, 18, 24)
 LEFT, RIGHT, TOP, BOTTOM = 34, 12, 10, 22
 GRAB_RADIUS = 18
 HANDLE_RADIUS = 9
+LABEL_SIZE = 10
 
 
 def format_freq(freq):
@@ -42,6 +43,7 @@ class EqCurve(Gtk.DrawingArea):
         super().__init__(content_width=640, content_height=280, hexpand=True, vexpand=True, **kwargs)
         self.eq = eq
         self.selected = 0
+        self.text_factor = 1.0
         self._dragging = None
         self._drag_start = (0, 0)
         self.set_draw_func(self._draw)
@@ -64,21 +66,38 @@ class EqCurve(Gtk.DrawingArea):
         self.selected = index
         self.queue_draw()
 
+    def set_text_factor(self, factor):
+        '''This text is drawn here, so it does not follow the window's by itself.'''
+        self.text_factor = factor
+        self.queue_draw()
+
+    @property
+    def _left(self):
+        return LEFT * self.text_factor
+
+    @property
+    def _bottom(self):
+        return BOTTOM * self.text_factor
+
+    @property
+    def _handle_radius(self):
+        return HANDLE_RADIUS * self.text_factor
+
     # Axes
     def _freq_to_x(self, freq, width):
         span = math.log10(MAX_FREQ / MIN_FREQ)
-        return LEFT + (width - LEFT - RIGHT) * math.log10(freq / MIN_FREQ) / span
+        return self._left + (width - self._left - RIGHT) * math.log10(freq / MIN_FREQ) / span
 
     def _x_to_freq(self, x, width):
         span = math.log10(MAX_FREQ / MIN_FREQ)
-        fraction = min(max((x - LEFT) / max(width - LEFT - RIGHT, 1), 0), 1)
+        fraction = min(max((x - self._left) / max(width - self._left - RIGHT, 1), 0), 1)
         return MIN_FREQ * 10 ** (fraction * span)
 
     def _gain_to_y(self, gain, height):
-        return TOP + (height - TOP - BOTTOM) * (MAX_GAIN - gain) / (2 * MAX_GAIN)
+        return TOP + (height - TOP - self._bottom) * (MAX_GAIN - gain) / (2 * MAX_GAIN)
 
     def _y_to_gain(self, y, height):
-        fraction = min(max((y - TOP) / max(height - TOP - BOTTOM, 1), 0), 1)
+        fraction = min(max((y - TOP) / max(height - TOP - self._bottom, 1), 0), 1)
         return MAX_GAIN - fraction * 2 * MAX_GAIN
 
     def handle_position(self, band, width, height):
@@ -88,7 +107,7 @@ class EqCurve(Gtk.DrawingArea):
 
     def band_at(self, x, y):
         width, height = self.get_width(), self.get_height()
-        best, best_distance = None, GRAB_RADIUS
+        best, best_distance = None, GRAB_RADIUS * self.text_factor
         for index, band in enumerate(self.eq.bands):
             handle_x, handle_y = self.handle_position(band, width, height)
             distance = math.hypot(handle_x - x, handle_y - y)
@@ -141,7 +160,7 @@ class EqCurve(Gtk.DrawingArea):
     def _draw(self, _area, cr, width, height):
         self._draw_grid(cr, width, height)
 
-        points = max(min((width - LEFT - RIGHT) // 3, 260), 2)
+        points = max(min(int(width - self._left - RIGHT) // 3, 260), 2)
         freqs = [MIN_FREQ * (MAX_FREQ / MIN_FREQ) ** (index / (points - 1)) for index in range(points)]
         coefficients = [
             (band, band_coefficients(band.type, band.freq, band.gain, band.q)) for band in self.eq.bands
@@ -191,46 +210,46 @@ class EqCurve(Gtk.DrawingArea):
         cr.set_source_rgb(0.055, 0.067, 0.09)
         cr.paint()
 
-        cr.set_font_size(10)
+        cr.set_font_size(LABEL_SIZE * self.text_factor)
         for freq in GRID_FREQS:
             x = self._freq_to_x(freq, width)
             cr.set_source_rgba(1, 1, 1, 0.07)
             cr.set_line_width(1)
             cr.move_to(round(x) + 0.5, TOP)
-            cr.line_to(round(x) + 0.5, height - BOTTOM)
+            cr.line_to(round(x) + 0.5, height - self._bottom)
             cr.stroke()
             label = format_freq(freq)
             extents = cr.text_extents(label)
             cr.set_source_rgba(1, 1, 1, 0.45)
-            cr.move_to(min(max(x - extents.width / 2, 0), width - extents.width - 1), height - 7)
+            cr.move_to(min(max(x - extents.width / 2, 0), width - extents.width - 1), height - 7 * self.text_factor)
             cr.show_text(label)
 
         for gain in GRID_GAINS:
             y = self._gain_to_y(gain, height)
             cr.set_source_rgba(1, 1, 1, 0.2 if gain == 0 else 0.07)
             cr.set_line_width(1)
-            cr.move_to(LEFT, round(y) + 0.5)
+            cr.move_to(self._left, round(y) + 0.5)
             cr.line_to(width - RIGHT, round(y) + 0.5)
             cr.stroke()
             label = f'{gain:+d}' if gain else '0'
             extents = cr.text_extents(label)
             cr.set_source_rgba(1, 1, 1, 0.45)
-            cr.move_to(LEFT - extents.width - 6, y + extents.height / 2)
+            cr.move_to(self._left - extents.width - 6, y + extents.height / 2)
             cr.show_text(label)
 
     def _draw_handles(self, cr, width, height):
-        cr.set_font_size(10)
+        cr.set_font_size(LABEL_SIZE * self.text_factor)
         for index, band in enumerate(self.eq.bands):
             x, y = self.handle_position(band, width, height)
             color = BAND_COLORS[index % len(BAND_COLORS)]
             alpha = 1.0 if band.enabled and self.eq.enabled else 0.35
 
             if index == self.selected:
-                cr.arc(x, y, HANDLE_RADIUS + 3, 0, 2 * math.pi)
+                cr.arc(x, y, self._handle_radius + 3, 0, 2 * math.pi)
                 cr.set_source_rgba(*color, 0.3)
                 cr.fill()
 
-            cr.arc(x, y, HANDLE_RADIUS, 0, 2 * math.pi)
+            cr.arc(x, y, self._handle_radius, 0, 2 * math.pi)
             cr.set_source_rgba(*color, alpha)
             cr.fill()
 

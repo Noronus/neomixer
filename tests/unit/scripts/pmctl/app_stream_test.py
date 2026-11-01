@@ -13,8 +13,8 @@ from neomixer.scripts import pmctl, pmctl_async
 # pipewire-pulse gives a sink and its monitor source the same index, so a
 # lookup in the wrong namespace finds a real, but wrong, device
 DEVICE_INDEX = 3
-SINK = SimpleNamespace(name='test_sink')
-SOURCE = SimpleNamespace(name='test_sink.monitor')
+SINK = SimpleNamespace(name='test_sink', proplist={})
+SOURCE = SimpleNamespace(name='test_sink.monitor', proplist={})
 
 
 def _stream(app_type, index=7, object_id='42', node_name='test_app_node'):

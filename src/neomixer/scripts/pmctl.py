@@ -786,6 +786,14 @@ def get_device_by_index(device_type: str, device_index: str) -> PulseSinkInfo | 
         return None
 
 
+def device_behind_filter(device: PulseSinkInfo | PulseSourceInfo) -> str:
+    '''
+    The name of the device a stream plays into. Pulse reports the EQ sitting in front of a
+    hardware output as the stream's device, while it is the output the stream was put on.
+    '''
+    return device.proplist.get('neomixer.eq.device', device.name)
+
+
 def get_app_device(app_type: str, app: PulseSinkInputInfo | PulseSourceOutputInfo) -> PulseSinkInfo | PulseSourceInfo:
     '''
     Get the device an application stream is on.
@@ -845,6 +853,9 @@ def is_hardware_device(device: PulseSinkInfo | PulseSourceInfo) -> bool:
     Returns:
         bool: True if hardware, False otherwise.
     '''
+    if 'nm_eq_' in device.name:
+        return False
+
     is_easy = 'easyeffects_' in device.name
     is_monitor = device.proplist.get('device.class') == "monitor"
     is_null = device.proplist.get('factory.name') == 'support.null-audio-sink'
@@ -885,7 +896,7 @@ def app_by_id(index: int, app_type: str) -> PulseSinkInputInfo | PulseSourceOutp
     app_info = PULSE.sink_input_info if app_type == 'sink_input' else PULSE.source_output_info
     app = app_info(index)
     device = get_app_device(app_type, app)
-    app.device_name = device.name
+    app.device_name = device_behind_filter(device)
     app.client_props = client_proplist(app.client)
     return app
 
@@ -934,7 +945,7 @@ def list_apps(app_type: str) -> list[PulseSinkInputInfo | PulseSourceOutputInfo]
         if device is None:
             continue
 
-        app.device_name = device.name
+        app.device_name = device_behind_filter(device)
         app.client_props = client_proplist(app.client)
         app_list.append(app)
 

@@ -53,7 +53,24 @@ CONF
     mkdir -p "$SB/config/pipewire/pipewire.conf.d"
     echo 'context.spa-libs = { audiotestsrc = audiotestsrc/libspa-audiotestsrc }' \
         >"$SB/config/pipewire/pipewire.conf.d/90-sandbox.conf"
-    dbus_addr=$(dbus-daemon --session --fork --print-address=1 --print-pid=3 3>"$SB/pid/dbus" | head -1)
+    # A bus without service directories: it must not activate the desktop's own services. Its
+    # xdg-document-portal would take over /run/user/$UID/doc, and once it exits Flatpak apps
+    # can no longer start until the real portal is restarted.
+    cat >"$SB/config/dbus.conf" <<CONF
+<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <type>session</type>
+  <listen>unix:tmpdir=/tmp</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default">
+    <allow send_destination="*" eavesdrop="true"/>
+    <allow eavesdrop="true"/>
+    <allow own="*"/>
+  </policy>
+</busconfig>
+CONF
+    dbus_addr=$(dbus-daemon --config-file="$SB/config/dbus.conf" --fork --print-address=1 --print-pid=3 3>"$SB/pid/dbus" | head -1)
     cat >"$SB/env" <<ENV
 export NEOMIXER_SANDBOX="$SB"
 export XDG_RUNTIME_DIR="$SB/run"
@@ -71,7 +88,7 @@ ENV
     start_audio || exit 1
     ( source "$SB/env"
       nohup kwin_wayland --virtual --no-lockscreen --no-global-shortcuts --no-kactivities \
-          --socket wl-sandbox --width 1920 --height 1080 >"$SB/log/kwin.log" 2>&1 &
+          --socket wl-sandbox --output-count 2 --width 1920 --height 1080 >"$SB/log/kwin.log" 2>&1 &
       echo $! >"$SB/pid/kwin" )
     for _ in $(seq 100); do
         [ -S "$SB/run/wl-sandbox" ] && break

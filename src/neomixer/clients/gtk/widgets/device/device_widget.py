@@ -140,8 +140,7 @@ class DeviceWidget(Gtk.Box):
 
         buttons = Gtk.Box(spacing=3, homogeneous=True, margin_top=4)
         buttons.append(self.mute_widget)
-        if self.device_type in ('vi', 'hi'):
-            buttons.append(self.eq_button)
+        buttons.append(self.eq_button)
         if self.device_model.primary is not None:
             buttons.append(self.primary_widget)
         self.append(buttons)

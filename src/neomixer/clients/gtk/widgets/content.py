@@ -62,6 +62,7 @@ class Content(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, **kwargs)
         self.apps_filter = apps_filter
         self.show_offline = show_offline
+        self.text_factor = 1.0
         self.settings_button = Gtk.MenuButton(icon_name='emblem-system-symbolic')
         self.settings_box = SettingsMenuBox()
 
@@ -207,8 +208,14 @@ class Content(Gtk.Box):
         panel.append(apps_scroll)
         return panel
 
+    def set_text_factor(self, factor):
+        '''Cards grow with their text. Everything else takes its size from its content.'''
+        self.text_factor = factor
+        for card in self.app_cards.values():
+            card.set_size_request(int(CARD_MIN_WIDTH * factor), -1)
+
     def add_app_card(self, card):
-        card.set_size_request(CARD_MIN_WIDTH, -1)
+        card.set_size_request(int(CARD_MIN_WIDTH * self.text_factor), -1)
         self.app_cards[(card.entry.app_type, card.entry.key)] = card
         self.app_flow.append(card)
         self.refresh_apps_view()

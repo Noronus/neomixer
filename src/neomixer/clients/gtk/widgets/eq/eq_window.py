@@ -63,6 +63,9 @@ class EqWindow(Gtk.Window):
 
         self.refresh()
 
+    def set_text_factor(self, factor):
+        self.curve.set_text_factor(factor)
+
     def _build_toolbar(self):
         toolbar = Gtk.Box(spacing=10)
         toolbar.add_css_class('eq-toolbar')
