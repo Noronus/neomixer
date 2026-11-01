@@ -52,7 +52,7 @@ def is_system_client(props: dict) -> bool:
         return True
     if props.get('application.id') in SYSTEM_APP_IDS:
         return True
-    if '_peak' in name or name in ('pmctl', 'neomixer', 'neomixer-listener'):
+    if '_peak' in name or name == 'pmctl' or name.startswith(('neomixer', 'pulsemeeter')):
         return True
     return bool(SYSTEM_BINARIES.match(binary))
 
@@ -123,13 +123,20 @@ def app_label(props: dict, client_props: dict | None = None) -> str:
 def better_label(current: str, new: str, key: str) -> str:
     '''
     A program's clients and streams can go by different names (Signal has "ringrtc" and
-    "Signal"). Prefer the one that resembles the program's key, then the first one seen.
+    "Signal", Steam also has "Steam Voice Settings"). Prefer the one that resembles the
+    program's key the most, then the first one seen.
     '''
     if not current:
         return new
 
-    def related(label):
-        lower = TRAILING_VERSION.sub('', label).lower()
-        return lower and (lower in key or key in lower)
+    def plain(label):
+        return TRAILING_VERSION.sub('', label).lower()
 
-    return new if related(new) and not related(current) else current
+    def related(label):
+        return plain(label) and (plain(label) in key or key in plain(label))
+
+    if not related(new):
+        return current
+    if not related(current):
+        return new
+    return new if len(plain(new)) < len(plain(current)) else current

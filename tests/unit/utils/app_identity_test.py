@@ -46,6 +46,8 @@ def test_better_label_prefers_what_resembles_the_key():
     assert better_label('Signal', 'ringrtc', 'signal-desktop') == 'Signal'
     assert better_label('Factorio 2.1.24', 'factorio', 'factorio') == 'Factorio 2.1.24'
     assert better_label('', 'New', 'key') == 'New'
+    assert better_label('Steam Voice Settings', 'Steam', 'steam') == 'Steam'
+    assert better_label('Steam', 'Steam Voice Settings', 'steam') == 'Steam'
 
 
 @pytest.mark.parametrize('props', [
@@ -77,6 +79,8 @@ def test_regular_stream_is_listed():
     {'application.name': 'pactl', 'application.process.binary': 'pactl'},
     {'application.name': 'in1.monitor_sink_peak', 'application.process.binary': 'python3.14'},
     {'application.name': 'pmctl', 'application.process.binary': 'python3.14'},
+    {'application.name': 'pulsemeeter-listener', 'application.process.binary': 'python3.14'},
+    {'application.name': 'neomixer-listener', 'application.process.binary': 'python3.14'},
     {},
 ])
 def test_system_clients_are_not_programs(props):
