@@ -254,6 +254,7 @@ def all_restored_after_reboot(d):
     d.check(card is not None and card.entry.state == 'offline', 'program is listed though it did not start yet')
     d.check(card.entry.device == 'inmedia', 'with its output')
     d.check(card.volume_widget.get_volume() == 55, f'and volume {card.volume_widget.get_volume()}')
+    yield 0.5  # a slower machine has not drawn the window yet
     d.shot('after_reboot')
 
     d.play('Firefox', binary='firefox', freq=330)
@@ -845,7 +846,7 @@ def _measure_at_device(device, play_args, freq=1000, seconds=0.9):
     import tempfile
     import time
     from neomixer.scripts import pmctl
-    from tests.integration.audio_probe import _tone_magnitude, _write_sine, AMPLITUDE
+    from tests.integration.audio_probe import _tone_magnitude, _write_sine, AMPLITUDE, UNTOUCHED
 
     with tempfile.TemporaryDirectory() as folder:
         tone, recording = os.path.join(folder, 'tone.wav'), os.path.join(folder, 'out.wav')
@@ -857,7 +858,7 @@ def _measure_at_device(device, play_args, freq=1000, seconds=0.9):
         time.sleep(0.25)
         for channel in ('FL', 'FR'):
             pmctl.link(f'{device}:monitor_{channel}', f'nmprobe:input_{channel}')
-        player = subprocess.Popen(['pw-play', *play_args, tone], stderr=subprocess.DEVNULL)
+        player = subprocess.Popen(['pw-play', *UNTOUCHED, *play_args, tone], stderr=subprocess.DEVNULL)
         time.sleep(0.45 + seconds)
         recorder.send_signal(signal.SIGINT)
         recorder.wait()
@@ -1224,6 +1225,63 @@ def live_hold(d):
         yield 0.2
         d.check(_default(kind) == name, f'lets go without changing it: {_default(kind)}')
     yield 2.5  # the autosave
+
+
+def live_output(d):
+    '''
+    For a real desktop, not part of the suite: a real sound card, with a config of one virtual
+    input routed to it, and short test tones that can be heard. Removes what it made when it ends.
+    '''
+    import subprocess
+    from neomixer.scripts import pw_eq
+    from tests.integration.ui_driver import links
+
+    name = next(iter(d.content.device_box['a'].widgets.values())).device_model.name
+    virtual = next(iter(d.content.device_box['vi'].widgets.values()))
+    original = subprocess.check_output(['pactl', 'get-sink-volume', name], text=True).split('/')[1].strip()
+    subprocess.run(['pactl', 'set-sink-volume', name, '25%'], check=True)
+    yield 0.5
+    d.check(_default('sink') == virtual.device_model.name, f'the virtual input is the default: {_default("sink")}')
+
+    before = _measure_at_device(name, ['--target', virtual.device_model.name])
+    print(f'route without EQ: {before}')
+    d.check(before is not None, 'audio reaches the sound card through the route')
+    window = _set_band(d, 'a', '1', 9)
+    yield 1.5
+    d.check(bool(pw_eq.running_pids(name)), 'EQ runs')
+    d.check(f'output.nm_eq_{name}:output_FL\n  |-> {name}:playback_FL' in links(), 'the session manager links it to the sound card')
+
+    routed = _measure_at_device(name, ['--target', virtual.device_model.name])
+    print(f'route with EQ: {routed}')
+    d.check(routed is not None and abs(routed - before - 9) < 0.7, f'routed input gets +9 dB: {routed - before if routed else None}')
+    direct = _measure_at_device(name, ['--target', name])
+    print(f'program on the output with EQ: {direct}')
+    d.check(direct is not None and abs(direct - before - 9) < 1.5, f'program on the output gets +9 dB: {direct - before if direct else None}')
+
+    window.enable_switch.set_active(False)
+    yield 0.4
+    off = _measure_at_device(name, ['--target', virtual.device_model.name])
+    print(f'EQ off: {off}')
+    d.check(off is not None and abs(off - before) < 0.5, f'off passes through: {off - before if off else None}')
+    window.enable_switch.set_active(True)
+    yield 0.4
+
+    # What Steam does, with the real sound card and its EQ there
+    virtual.hold_widget.set_active(True)
+    yield 0.3
+    _take_default('sink', name)
+    yield 0.5
+    d.check(_default('sink') == virtual.device_model.name, f'the default comes back: {_default("sink")}')
+    virtual.hold_widget.set_active(False)
+    yield 0.2
+    d.shot('live_output')
+
+    window.eq.reset()
+    window.eq.enabled = False
+    window._edited()
+    yield 0.3
+    subprocess.run(['pactl', 'set-sink-volume', name, original], check=True)
+    d.app.config_model.cleanup = True
 
 
 def live_check(d):

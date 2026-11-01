@@ -11,6 +11,9 @@ import time
 import wave
 
 AMPLITUDE = 0.1
+# The session manager restores volumes per media role, and pw-play has one up to PipeWire 1.4. A
+# measurement must not get the volume of whichever program set it last.
+UNTOUCHED = ['-P', '{ state.restore-props=false }']
 
 
 def _write_sine(path, freq, seconds, rate=48000):
@@ -55,7 +58,7 @@ def measure_db(play_target, record_target, freq, seconds=0.8):
             stderr=subprocess.DEVNULL
         )
         time.sleep(0.2)
-        player = subprocess.Popen(['pw-play', '--target', play_target, tone], stderr=subprocess.DEVNULL)
+        player = subprocess.Popen(['pw-play', *UNTOUCHED, '--target', play_target, tone], stderr=subprocess.DEVNULL)
         time.sleep(0.45 + seconds)
         recorder.send_signal(signal.SIGINT)
         recorder.wait()

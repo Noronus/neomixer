@@ -2,6 +2,7 @@
 Measures real audio through the real filter chain. Needs tests/integration/sandbox.sh running:
     source .sandbox/env && python -m pytest tests/integration/eq_audio_test.py
 '''
+import glob
 import os
 import subprocess
 import time
@@ -141,6 +142,9 @@ class EqAudioTest(unittest.TestCase):
         Nothing plays here, the app recording is all that keeps this chain running. The EQ's
         nodes are passive, so this has to work without them activating anything themselves.
         '''
+        if not glob.glob('/usr/lib*/spa-0.2/audiotestsrc/libspa-audiotestsrc.so'):
+            self.skipTest('this PipeWire comes without the test source, Fedora has none')
+
         mic, bus = 'eqtest_mic', 'eqtest_bus'
         subprocess.run(['pw-cli', 'create-node', 'adapter', (
             f'{{ factory.name=audiotestsrc node.name={mic} node.description={mic} '
