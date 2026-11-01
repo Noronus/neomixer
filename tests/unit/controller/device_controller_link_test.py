@@ -30,6 +30,7 @@ class LinkConnectionTest(unittest.TestCase):
 
         self.controller = DeviceController.__new__(DeviceController)
         SignalModel.__init__(self.controller)
+        self.controller._running_eqs = {}
         self.connection = ConnectionModel(nick='out', input_sel_channels=[True, True], output_sel_channels=[True, True])
 
     def connect(self, input_ports, output_ports, state=True):
@@ -156,6 +157,7 @@ class UpdateConnectionTest(unittest.TestCase):
         repository.get_device.side_effect = lambda device_type, _id: self.music if device_type == 'vi' else self.headset
         self.controller = DeviceController.__new__(DeviceController)
         SignalModel.__init__(self.controller)
+        self.controller._running_eqs = {}
         self.controller.device_repository = repository
 
     def edit(self, auto_ports, port_map):

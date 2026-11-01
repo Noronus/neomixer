@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, root_validator, validator
 from neomixer.scripts import pmctl
 from neomixer.schemas import pulse_mappings
 from neomixer.model.connection_model import ConnectionModel, port_position
+from neomixer.model.eq_model import EqModel
 
 LOG = logging.getLogger("generic")
 
@@ -28,6 +29,7 @@ class DeviceModel(BaseModel):
     channel_list: list[str]
     connections: dict[str, dict[str, ConnectionModel]] = {'a': {}, 'b': {}}
     selected_channels: list[bool] | None
+    eq: EqModel = Field(default_factory=EqModel)  # only used on input devices
 
     # Transient runtime status (not persisted).
     # init_failed/init_error: hard error (e.g. pw-cli failed to create) - UI shows warning.

@@ -54,6 +54,7 @@ class LoopbackConnectionTest(unittest.TestCase):
         repository.get_device.side_effect = lambda device_type, _id: self.music if device_type == 'vi' else self.headset
         self.controller = DeviceController.__new__(DeviceController)
         SignalModel.__init__(self.controller)
+        self.controller._running_eqs = {}
         self.controller.device_repository = repository
         self.controller._loopback_procs = {}
 

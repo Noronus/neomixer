@@ -1,13 +1,23 @@
 import sys
 import logging
+import subprocess
+from dataclasses import dataclass
 
-from neomixer.scripts import pmctl
+from neomixer.scripts import pmctl, pw_eq
 from neomixer.model.device_model import DeviceModel
 from neomixer.model.signal_model import SignalModel
 from neomixer.model.connection_model import ConnectionModel, matched_by_order, pair_match, port_position, removed_pairs
 from neomixer.repository.device_repository import DeviceRepository
 
 LOG = logging.getLogger("generic")
+
+
+@dataclass
+class RunningEq:
+    '''The filter chain running for an input device. "process" is None if an earlier run started it.'''
+    process: subprocess.Popen | None
+    signature: str
+    positions: list[str]
 
 
 class DeviceController(SignalModel):
@@ -37,10 +47,21 @@ class DeviceController(SignalModel):
         super().__init__()
 
         self._loopback_procs = {}
+        self._running_eqs = {}
         self.device_repository = device_repository
         if not pmctl.is_pipewire():
             LOG.error('ERROR: pipewire-pulse not detected, pipewire-pulse is required')
             sys.exit(1)
+
+        self.setup_graph()
+
+    def setup_graph(self):
+        '''
+        Build everything in the audio graph from the config: nothing NeoMixer creates survives
+        a reboot or a restart of the sound server. Whatever still exists is left in place.
+        '''
+        # EQs are found again by their process, whose nodes are gone if the server restarted
+        self._running_eqs = {}
 
         # we have to create the virtual devices first
         for device_type in ('vi', 'b'):
@@ -60,6 +81,15 @@ class DeviceController(SignalModel):
                 if device.init_failed:
                     continue
                 device.present = pmctl.device_exists(device.name)
+                if device.present:
+                    self._restore_device_state(device)
+
+        for device_type in ('vi', 'hi'):
+            for device_id, device in self.device_repository.get_devices_by_type(device_type).items():
+                try:
+                    self._setup_eq(device)
+                except Exception:
+                    LOG.exception("Skipping EQ for %s/%s", device_type, device_id)
 
         # now we connect the input devices
         for device_type in ('vi', 'hi'):
@@ -68,6 +98,25 @@ class DeviceController(SignalModel):
                     self.reconnect(device_type, device_id)
                 except Exception:
                     LOG.exception("Skipping reconnect for %s/%s", device_type, device_id)
+
+    @staticmethod
+    def _restore_device_state(device):
+        '''
+        Virtual devices come back at full volume, so they get their saved volume, mute and
+        primary back. The session manager restores hardware by itself, and its volume may
+        have changed while NeoMixer was not running: that one is read rather than set, a
+        stale value could be painfully loud.
+        '''
+        if device.device_class != 'virtual' or device.external:
+            pa_device = pmctl.get_device_by_name(device.device_type, device.name)
+            if pa_device is not None:
+                device.update_from_pa(pa_device)
+            return
+
+        pmctl.set_volume(device.device_type, device.name, device.volume[0])
+        pmctl.mute(device.device_type, device.name, device.mute)
+        if device.primary:
+            pmctl.set_primary(device.device_type, device.name)
 
     def _try_init_device(self, device_type, device_id, log_msg, cache=True, wait=True):
         """
@@ -156,7 +205,19 @@ class DeviceController(SignalModel):
             device.init_error = ''
 
         device.present = True
+        self._restore_after_hotplug(device)
         self.reconnect(device_type, device_id)
+
+    def _restore_after_hotplug(self, device):
+        # Pulse reports a device slightly before PipeWire has its ports
+        port_type = 'output' if device.device_type == 'source' or device.get_type() == 'vi' else 'input'
+        pmctl.wait_for_device_port(port_type, device.name)
+
+        if device.device_class == 'virtual' and not device.external:
+            self._restore_device_state(device)
+
+        if device.get_type() in ('vi', 'hi'):
+            self._setup_eq(device)
 
     def handle_unplug(self, device_type: str, device_id: str):
         """
@@ -203,6 +264,7 @@ class DeviceController(SignalModel):
         device = self.device_repository.get_device(device_type, device_id)
 
         self.bulk_connect(device_type, device_id, False)
+        self._stop_eq(device)
 
         if device_type in ('vi', 'b') and device.external is False:
             pmctl.remove_device(device.name)
@@ -219,6 +281,9 @@ class DeviceController(SignalModel):
         if device_type in ('vi', 'b'):
             if self._try_init_device(device_type, device_id, "Failed to init %s/%s on update") and device.primary:
                 pmctl.set_primary(device.device_type, device.name)
+
+        if device_type in ('vi', 'hi'):
+            self._setup_eq(device)
 
         self.reconnect(device_type, device_id)
 
@@ -241,6 +306,10 @@ class DeviceController(SignalModel):
         for proc in self._loopback_procs.values():
             pmctl.destroy_loopback(proc)
         self._loopback_procs.clear()
+
+        for input_type in ('vi', 'hi'):
+            for input_device in self.device_repository.get_devices_by_type(input_type).values():
+                self._stop_eq(input_device)
 
         device_dict = self.device_repository.get_all_devices()
         for _, device_list in device_dict.items():
@@ -379,8 +448,8 @@ class DeviceController(SignalModel):
             output_channels = output_device.get_selected_channels(output_ports)
             port_map = connection_model.str_port_map(input_channels, output_channels)
 
-            # The loopback plays each input channel on its port of the same index, so the map applies as it is
-            source_name, source_ports = input_device.name, input_ports
+            # The EQ and the loopback carry each input channel on its port of the same index, so the map applies as it is
+            source_name, source_ports = self._route_source(input_device, input_ports)
             if loopback_name is not None:
                 source_name = pmctl.loopback_nodes(loopback_name)[1]
                 source_ports = pmctl.get_ports('output', source_name)
@@ -414,8 +483,8 @@ class DeviceController(SignalModel):
                 input_ports=source_ports, output_ports=output_ports
             )
 
-            # Warnings name the input's own channel, not the loopback port carrying it
-            if loopback_name is not None:
+            # Warnings name the input's own channel, not the port carrying it
+            if source_name != input_device.name:
                 input_port_of = dict(zip(source_ports, input_ports))
                 unlinked = [
                     input_port_of.get(source, source) + arrow + target
@@ -506,8 +575,9 @@ class DeviceController(SignalModel):
             pmctl.set_route_volume(loopback_name, connection_model.route_volume)
 
             capture_map = ' '.join(f'{index}:{index}' for index in range(channels))
+            source_name, source_ports = self._route_source(input_device, input_ports)
             capture_failed = pmctl.link_channels(
-                input_device.name, pmctl.loopback_nodes(loopback_name)[0], capture_map, input_ports=input_ports
+                source_name, pmctl.loopback_nodes(loopback_name)[0], capture_map, input_ports=source_ports
             )
         except Exception as e:
             LOG.exception('Failed to create loopback %s', loopback_name)
@@ -539,6 +609,115 @@ class DeviceController(SignalModel):
         if not pmctl.wait_for_loopback_gone(loopback_name):
             LOG.warning('Loopback %s still present after teardown', loopback_name)
         pmctl.remove_bridge(loopback_name)
+
+    #
+    # # EQ
+    #
+    def _route_source(self, input_device, input_ports):
+        '''
+        The node a device's routes play from, with its ports: the device, or its EQ if running
+        '''
+        if input_device.name not in self._running_eqs:
+            return input_device.name, input_ports
+
+        playback = pw_eq.eq_nodes(input_device.name)[1]
+        return playback, pmctl.get_ports('output', playback)
+
+    def set_eq(self, device_type, device_id):
+        '''
+        Bring the running audio in line with a device's EQ settings. Most changes reach the
+        running filters without a sound. Starting the EQ, or changing a band's filter type,
+        has to rebuild it and relink the routes, which leaves a short gap in the audio.
+        '''
+        device = self.device_repository.get_device(device_type, device_id)
+        running = self._running_eqs.get(device.name)
+
+        if running is None:
+            if device.eq.enabled:
+                self._insert_eq(device_type, device_id, device)
+            return
+
+        if pw_eq.signature(running.positions, device.eq) == running.signature:
+            pw_eq.set_params(device.name, device.eq)
+            return
+
+        self._unlink_routes(device_type, device_id, device)
+        self._stop_eq(device)
+        self._start_eq(device)
+        self.reconnect(device_type, device_id)
+
+    def _insert_eq(self, device_type, device_id, device):
+        # Started before the routes are touched: the gap is only as long as relinking them
+        if not self._start_eq(device):
+            return
+
+        running = self._running_eqs.pop(device.name)
+        self._unlink_routes(device_type, device_id, device)
+        self._running_eqs[device.name] = running
+        self.reconnect(device_type, device_id)
+
+    def _unlink_routes(self, device_type, device_id, device):
+        for output_type, connections in device.connections.items():
+            for output_id, connection in connections.items():
+                if connection.state:
+                    self.set_connection(device_type, device_id, output_type, output_id, False, soft=True)
+
+    def _setup_eq(self, device):
+        '''Have the EQ a device's settings ask for running and fed, before its routes get linked.'''
+        if device.name in self._running_eqs:
+            self._link_eq_input(device)
+            return
+
+        if device.eq.enabled:
+            self._start_eq(device)
+        else:
+            # one left from an earlier run, whose EQ was switched off since
+            pw_eq.stop(device.name)
+
+    def _start_eq(self, device):
+        '''
+        Start a device's EQ and feed it from the device, or take over a matching one from an
+        earlier run. That one keeps playing, a restart of NeoMixer is not audible.
+        '''
+        try:
+            ports = pmctl.get_ports('output', device.name)
+        except RuntimeError:
+            ports = []
+
+        if not ports:
+            LOG.warning('%s has no ports, not starting its EQ for now', device.name)
+            return False
+
+        positions = [port_position(port) for port in ports]
+        signature = pw_eq.signature(positions, device.eq)
+        process = None
+        adopted = pw_eq.running_signature(device.name) == signature and pw_eq.wait_ready(device.name, len(ports), timeout=0.2)
+        if adopted:
+            pw_eq.set_params(device.name, device.eq)
+        else:
+            pw_eq.stop(device.name)
+            process = pw_eq.start(device.name, positions, device.eq)
+            if not pw_eq.wait_ready(device.name, len(ports)):
+                LOG.error('The EQ of %s did not start', device.name)
+                pw_eq.stop(device.name, process)
+                return False
+
+        self._running_eqs[device.name] = RunningEq(process, signature, positions)
+        self._link_eq_input(device)
+        return True
+
+    def _link_eq_input(self, device):
+        capture = pw_eq.eq_nodes(device.name)[0]
+        ports = pmctl.get_ports('output', device.name)
+        channels = ' '.join(f'{index}:{index}' for index in range(len(ports)))
+        try:
+            pmctl.link_channels(device.name, capture, channels, input_ports=ports)
+        except RuntimeError:
+            LOG.warning('Could not feed the EQ of %s', device.name)
+
+    def _stop_eq(self, device):
+        running = self._running_eqs.pop(device.name, None)
+        pw_eq.stop(device.name, running.process if running else None)
 
     def set_route_volume(self, input_type, input_id, output_type, output_id, volume):
         '''Set per-route volume for a loopback connection.'''
@@ -725,6 +904,9 @@ class DeviceController(SignalModel):
             for input_type in ('vi', 'hi'):
                 for input_device in self.device_repository.get_devices_by_type(input_type).values():
                     input_device.connections[device_type].pop(device_id)
+
+        if device_type in ('vi', 'hi'):
+            self._stop_eq(device)
 
         if device.device_class == 'virtual':
             pmctl.remove_device(device.name)
