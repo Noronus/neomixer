@@ -982,7 +982,7 @@ def output_eq(d):
     yield 0.8
     d.check(stream_device('Firefox') in (HEADSET, f'input.nm_eq_{HEADSET}'), f'program goes to it: {stream_device("Firefox")}')
     d.check(card.entry.device == HEADSET, f'and shows the output, not its EQ: {card.entry.device}')
-    d.check(list(card.entry.streams.values())[0].device == HEADSET, 'also on the stream')
+    d.check(list(card.entry.streams.values())[0].device == HEADSET, f'also on the stream: {list(card.entry.streams.values())[0].device}')
     yield 2.5  # past the time a stream is being placed
     d.check(card.entry.known.device == HEADSET, 'the choice stays')
     select_device(card, 'inmedia')
