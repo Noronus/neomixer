@@ -1,16 +1,14 @@
 # Translations template for neomixer.
-# Copyright (C) 2026 Gabriel Carneiro
-# This file is distributed under the same license as the neomixer
-# project.
+# Copyright (C) 2026 NeoMixer contributors
+# This file is distributed under the same license as the neomixer project.
 # FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
 #
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: neomixer 2.2.0\n"
-"Report-Msgid-Bugs-To: "
-"https://github.com/theRealCarneiro/neomixer/issues\n"
-"POT-Creation-Date: 2026-10-27 21:23-0600\n"
+"Project-Id-Version: neomixer 1.0.0\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2026-11-01 10:58+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -24,44 +22,86 @@ msgstr ""
 msgid "Invalid device id: %s"
 msgstr ""
 
-#: src/neomixer/clients/gtk/layouts/content/tabbed.py:47
-msgid "Settings"
+#: src/neomixer/clients/gtk/tray.py:191
+msgid "Show or hide NeoMixer"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/content.py:49
+#: src/neomixer/clients/gtk/tray.py:195
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:63
+msgid "Quit NeoMixer"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/content.py:72
+#: src/neomixer/clients/gtk/widgets/content.py:82
+msgid "Open settings menu"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/content.py:81
+msgid "Settings menu"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/content.py:151
+msgid "PROGRAMS"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/content.py:159
+msgid "All"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/content.py:159
+msgid "Playback"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/content.py:159
+msgid "Recording"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/content.py:167
+msgid "Not running"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/content.py:169
+msgid "Also list programs that are not running right now"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/content.py:174
+msgid "Set up a program before it ever played anything"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/content.py:197
+msgid "No programs yet. They show up here once they connect to the sound server."
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/content.py:229
+#, python-format
+msgid "%d active of %d"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/content.py:301
 #, python-format
 msgid "Create new %s"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/content.py:59
+#: src/neomixer/clients/gtk/widgets/content.py:311
 msgid "Create device"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/content.py:64
-#: src/neomixer/clients/gtk/widgets/content.py:74
-msgid "Open settings menu"
-msgstr ""
-
-#: src/neomixer/clients/gtk/widgets/content.py:73
-msgid "Settings menu"
-msgstr ""
-
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:18
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:17
 msgid "What is NeoMixer?"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:19
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:18
 msgid ""
-"NeoMixer is a virtual audio mixer and router built on top of PipeWire."
-" It lets you create virtual devices and freely route audio between your "
-"inputs and outputs, controlling volume and muting along the way."
+"NeoMixer is a virtual audio mixer and router built on top of PipeWire. It"
+" lets you create virtual devices and freely route audio between your "
+"inputs and outputs, with volume, mute and an equalizer on the way."
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:24
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:23
 msgid "The four device types"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:25
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:24
 msgid ""
 "<b>Hardware Inputs</b> are physical sources such as microphones and line-"
 "in.\n"
@@ -72,76 +112,86 @@ msgid ""
 "from."
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:31
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:30
 msgid "Routing"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:32
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:31
 msgid ""
-"Audio always flows from an input to an output: Hardware and Virtual "
-"Inputs connect to Hardware and Virtual Outputs. Use the connection "
-"toggles on each input device to send its audio to the outputs you want."
+"Audio always flows from an input to an output: the A and B buttons on "
+"each input send its audio to that output. Right click one for its channel"
+" mapping and its own volume."
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:36
+msgid "Programs"
 msgstr ""
 
 #: src/neomixer/clients/gtk/widgets/welcome_window.py:37
-msgid "Cleanup"
-msgstr ""
-
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:38
 msgid ""
-"NeoMixer has the ability to leave or cleanup the virtual device and "
-"routes it creates with the cleanup setting. If NeoMixer is closed, it "
-"won't be able to monitor for hotplugging"
+"Every program that connects to the sound server stays in the list, "
+"whether it is playing or not. What you choose for a program is "
+"remembered: its streams go to that output whenever it starts, also after "
+"a reboot. You can set a program up while it is not running, or add one "
+"with the + button before it ever played anything."
 msgstr ""
 
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:73
 #: src/neomixer/clients/gtk/widgets/welcome_window.py:43
-msgid "Primary device"
+msgid "Equalizer"
 msgstr ""
 
 #: src/neomixer/clients/gtk/widgets/welcome_window.py:44
 msgid ""
-"Marking a device as primary makes it the default that new applications "
-"attach to automatically. This sets the primary in PipeWire itself."
+"The EQ button on an input opens its parametric equalizer. Drag a band on "
+"the curve to change its frequency and gain, scroll to change its width. "
+"Switching it off passes the audio through unchanged, so you can compare. "
+"Right clicking the EQ button does that without opening the window."
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:48
-msgid "VU meters & settings"
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:50
+msgid "Running in the background"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:49
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:51
 msgid ""
-"VU meters show the live volume peak of each device. Open the settings "
-"menu to toggle VU meters, enable cleanup on exit, and switch between the "
-"available layouts. Enabling VU Meters will show the inputs \"in use\" by "
-"NeoMixer."
+"New streams only go to their remembered output while NeoMixer runs, so "
+"closing the window keeps it running with an icon in the tray. Routes and "
+"the EQ also keep working after you quit, until you log out. Turn on "
+"\"Start at login\" to have all of it from the start."
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:55
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:57
+msgid "Primary device"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:58
 msgid ""
-"You can reopen this guide any time from the information button in the "
-"settings menu."
+"Marking a device as primary (★) makes it the default that new "
+"applications attach to automatically. This sets the primary in PipeWire "
+"itself."
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:64
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:111
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:63
+msgid "You can reopen this guide any time from the settings menu."
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:72
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:120
 msgid "Welcome to NeoMixer!"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:90
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:99
 msgid "Get started"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:116
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:125
 #, python-format
 msgid "Version %s"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:124
-msgid "View Source"
-msgstr ""
-
-#: src/neomixer/clients/gtk/widgets/welcome_window.py:132
-msgid "Discord"
+#: src/neomixer/clients/gtk/widgets/welcome_window.py:133
+msgid "Based on Pulsemeeter"
 msgstr ""
 
 #: src/neomixer/clients/gtk/widgets/app/app_dropdown.py:35
@@ -152,27 +202,53 @@ msgstr ""
 msgid "Select the input device for this app"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/app/app_widget.py:49
+#: src/neomixer/clients/gtk/widgets/app/app_picker.py:26
+msgid "Search programs"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/app/app_widget.py:22
+msgid "playing"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/app/app_widget.py:23
+#: src/neomixer/clients/gtk/widgets/app/app_widget.py:28
+msgid "connected, silent"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/app/app_widget.py:24
+#: src/neomixer/clients/gtk/widgets/app/app_widget.py:29
+msgid "not running"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/app/app_widget.py:27
+msgid "recording"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/app/app_widget.py:67
+msgid "Forget this program and its settings"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/app/app_widget.py:171
 msgid "This app doesn't allow changing its device"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/common/default_widget.py:25
+#: src/neomixer/clients/gtk/widgets/common/default_widget.py:23
 msgid "Primary"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/common/default_widget.py:34
+#: src/neomixer/clients/gtk/widgets/common/default_widget.py:33
 msgid "This device is primary"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/common/default_widget.py:36
+#: src/neomixer/clients/gtk/widgets/common/default_widget.py:35
 msgid "Set as primary device"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/common/mute_widget.py:24
+#: src/neomixer/clients/gtk/widgets/common/mute_widget.py:23
 msgid "Mute"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/common/mute_widget.py:25
+#: src/neomixer/clients/gtk/widgets/common/mute_widget.py:24
 msgid "Mute toggle"
 msgstr ""
 
@@ -184,71 +260,107 @@ msgstr ""
 msgid "Toggle the port "
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/common/volume_widget.py:38
 #: src/neomixer/clients/gtk/widgets/common/volume_widget.py:41
+#: src/neomixer/clients/gtk/widgets/common/volume_widget.py:44
 msgid "Volume Slider"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:28
-msgid "Enable VU Meters"
-msgstr ""
-
-#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:29
-msgid "Enable Cleanup"
-msgstr ""
-
-#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:30
-msgid "Layout "
-msgstr ""
-
-#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:33
-msgid "Apply"
-msgstr ""
-
-#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:35
 #: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:39
-msgid "Open the welcome guide"
+msgid "Start at login"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:41
-msgid "Enable or disable VU meters (volume peak)"
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:39
+msgid ""
+"Start NeoMixer with your desktop session, so routing and EQ are there "
+"right away"
 msgstr ""
 
 #: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:42
+msgid "Start hidden at login"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:42
+msgid "Start in the background without opening the window"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:45
+msgid "Keep running when closed"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:46
+msgid ""
+"Closing the window keeps NeoMixer in the background: new app streams only"
+" go to their remembered output while it runs"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:49
+msgid "VU meters"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:49
+msgid "Enable or disable VU meters (volume peak)"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:51
+msgid "Remove devices on quit"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:51
 msgid "Enable or disable cleaning up devices and connections upon closing"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:43
-msgid "Select the GUI layout"
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:61
+msgid "Guide"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/device/connection_widget.py:54
-msgid "Enable per-route volume (uses pw-loopback)"
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:62
+msgid "Open the welcome guide"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/device/connection_widget.py:66
-msgid "Route volume"
+#: src/neomixer/clients/gtk/widgets/containers/settings_menu_box.py:65
+msgid "Stop running in the background. Audio keeps its routes."
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/device/connection_widget.py:82
+#: src/neomixer/clients/gtk/widgets/device/connection_widget.py:73
 #, python-format
-msgid "Connect to %s, right click to open connection settings"
+msgid "Route to %s. Right click for its settings and volume."
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/device/device_widget.py:82
 #: src/neomixer/clients/gtk/widgets/device/device_widget.py:92
+msgid "EQ"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/device/device_widget.py:106
+#: src/neomixer/clients/gtk/widgets/device/device_widget.py:116
 msgid "Open device settings"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/device/device_widget.py:91
+#: src/neomixer/clients/gtk/widgets/device/device_widget.py:115
 msgid "Device settings"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/device/device_widget.py:127
+#: src/neomixer/clients/gtk/widgets/device/device_widget.py:157
+msgid "PLAYING HERE"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/device/device_widget.py:203
+msgid "on"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/device/device_widget.py:203
+msgid "off"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/device/device_widget.py:204
+#, python-format
+msgid "Equalizer (%s). Right click switches it on or off."
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/device/device_widget.py:224
 msgid "Failed to create device"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/device/device_widget.py:133
+#: src/neomixer/clients/gtk/widgets/device/device_widget.py:228
 #, python-format
 msgid "Device disconnected: %s"
 msgstr ""
@@ -267,6 +379,75 @@ msgstr ""
 
 #: src/neomixer/clients/gtk/widgets/device/port_map_widget.py:122
 msgid "Could not read device ports"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:17
+msgid "Peak"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:18
+msgid "Low shelf"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:19
+msgid "High shelf"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:20
+msgid "Low pass"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:21
+msgid "High pass"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:22
+msgid "Notch"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:24
+msgid "Custom"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:46
+#, python-format
+msgid "EQ: %s"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:71
+msgid "Switching off passes the audio through unchanged, for comparing"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:80
+msgid "Preset"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:84
+msgid "Reset"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:91
+msgid "Preamp"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:98
+msgid "Lower this when boosting, to keep room before clipping"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:124
+msgid "Active"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:135
+msgid "Hz"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:135
+msgid "dB"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/eq/eq_window.py:135
+msgid "Q"
 msgstr ""
 
 #: src/neomixer/clients/gtk/widgets/popovers/device_settings_popover.py:28
@@ -313,20 +494,36 @@ msgstr ""
 msgid "Select a channel map"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/popovers/edit_connection_widget.py:46
+#: src/neomixer/clients/gtk/widgets/popovers/edit_connection_widget.py:48
 msgid "Auto ports"
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/popovers/edit_connection_widget.py:86
+#: src/neomixer/clients/gtk/widgets/popovers/edit_connection_widget.py:62
+msgid "Own volume for this route"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/popovers/edit_connection_widget.py:63
+msgid "Enable per-route volume (uses pw-loopback)"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/popovers/edit_connection_widget.py:71
+msgid "Route volume"
+msgstr ""
+
+#: src/neomixer/clients/gtk/widgets/popovers/edit_connection_widget.py:113
 msgid "No matching channel names, matched channels by order."
 msgstr ""
 
-#: src/neomixer/clients/gtk/widgets/popovers/edit_connection_widget.py:90
+#: src/neomixer/clients/gtk/widgets/popovers/edit_connection_widget.py:117
 msgid "Untick Auto ports to keep this routing as your own and hide this warning."
 msgstr ""
 
-#: src/neomixer/controller/gtk_controller.py:251
-#: src/neomixer/controller/gtk_controller.py:252
+#: src/neomixer/controller/gtk_controller.py:142
+msgid "Sound server is gone, waiting for it…"
+msgstr ""
+
+#: src/neomixer/controller/gtk_controller.py:335
+#: src/neomixer/controller/gtk_controller.py:336
 msgid "Default"
 msgstr ""
 
@@ -374,27 +571,35 @@ msgstr ""
 msgid "Virtual Outputs"
 msgstr ""
 
-#: src/neomixer/model/types.py:14
-msgid "Application Outputs"
+#: src/neomixer/model/types.py:18
+msgid "Hardware In"
 msgstr ""
 
-#: src/neomixer/model/types.py:15
-msgid "Application Inputs"
+#: src/neomixer/model/types.py:19
+msgid "Virtual In"
 msgstr ""
 
 #: src/neomixer/model/types.py:20
-msgid "Physical sources such as microphones and line-in."
+msgid "Hardware Out"
 msgstr ""
 
 #: src/neomixer/model/types.py:21
+msgid "Virtual Out"
+msgstr ""
+
+#: src/neomixer/model/types.py:26
+msgid "Physical sources such as microphones and line-in."
+msgstr ""
+
+#: src/neomixer/model/types.py:27
 msgid "Virtual sinks that applications can play into."
 msgstr ""
 
-#: src/neomixer/model/types.py:22
+#: src/neomixer/model/types.py:28
 msgid "Physical sinks such as speakers and headphones."
 msgstr ""
 
-#: src/neomixer/model/types.py:23
+#: src/neomixer/model/types.py:29
 msgid "Virtual sources that applications can capture from."
 msgstr ""
 

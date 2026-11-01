@@ -1,32 +1,83 @@
-# Pulsemeeter
+# NeoMixer
 
-A frontend to ease the use of pulseaudio's routing capabilities, much like voicemeeter's workflow
+A virtual audio mixer for PipeWire with Voicemeeter's workflow: channel strips, A/B routing, a
+parametric EQ on every input, and programs that stay where you put them.
 
-[![translated](https://hosted.weblate.org/widget/pulsemeeter/pulsemeeter/svg-badge.svg)](https://hosted.weblate.org/projects/pulsemeeter/pulsemeeter/)
-[![pypi](https://img.shields.io/pypi/v/pulsemeeter)](https://pypi.org/project/pulsemeeter/)
-[![AUR](https://img.shields.io/aur/version/pulsemeeter?label=AUR-stable&color=cyan)](https://aur.archlinux.org/packages/pulsemeeter/)
-[![AUR](https://img.shields.io/aur/version/pulsemeeter-git?label=AUR-git&color=red)](https://aur.archlinux.org/packages/pulsemeeter-git/)
-[![Discord](https://img.shields.io/badge/chat-Discord-lightgrey)](https://discord.gg/ekWt9NuEWv)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
-[![Donate](https://img.shields.io/badge/donate-PayPal-green.svg)](https://www.paypal.com/donate/?hosted_button_id=6DSVJ3V3RCVT8)
-[![Donate](https://img.shields.io/badge/donate-Patreon-yellow.svg)](https://www.patreon.com/theRealCarneiro)
+![NeoMixer](docs/neomixer.png)
 
-### Wiki: \[[Installation](https://github.com/theRealCarneiro/pulsemeeter/wiki/Installation)\] \[[How to use](https://github.com/theRealCarneiro/pulsemeeter/wiki/How-to-use)\]
+NeoMixer is a fork of [Pulsemeeter](https://github.com/theRealCarneiro/pulsemeeter) by Gabriel
+Carneiro. It imports your Pulsemeeter config on first start.
 
-![](https://github.com/user-attachments/assets/19e06982-6c91-4c13-97c0-8b3b8ab173c5)
+## What it adds to Pulsemeeter
 
-<!--(This screenshot was taken while using ant dracula gtk theme, it will use your theme)-->
+- **Programs are always listed.** Everything that connects to the sound server stays in the list,
+  whether it plays, sits there silently or is not running at all. You can set a program up while it
+  is off, or add one with **+** before it ever played anything.
+- **Program routing is remembered.** A program's output, input, volume and mute are saved per
+  program, and applied whenever its streams appear: on restart, after a reboot, or when the device
+  it belongs on comes back.
+- **Equalizer on every input.** Eight parametric bands with a live curve, presets and a preamp.
+  Changes are inaudible to apply, and switching it off is instant, for comparing.
+- **Reboots lose nothing.** Settings are saved as they change, also on SIGTERM. Virtual devices get
+  their volume, mute and primary state back. It recovers by itself if the sound server restarts.
+- **A layout that holds up.** Strips share the window width and programs flow into a grid of their
+  own, however many there are the faders stay put and nothing scrolls sideways.
+- **Starts at login**, from a switch in the settings, and keeps running in the tray when closed.
 
-# Features
-- Create virtual inputs and outputs
-- Route audio from input devices to output devices, either hardware or virtual
-- Volume and mute control
-- Channel layout for virtual devices (mono, stereo, etc.)
-- Port selection for hardware devices (choose which channels of a hardware device should be active)
-- Custom port-to-port connection mapping
+![Equalizer](docs/neomixer-eq.png)
 
-# Installation
-Please visit the [wiki](https://github.com/theRealCarneiro/pulsemeeter/wiki/Installation) for in depth information on how to install.
+## Install
 
-# Discord Server
-If you want to get updates about new features, patches or leave some sugestions, join our [discord server](https://discord.gg/ekWt9NuEWv)
+```sh
+pipx install .
+neomixer
+```
+
+It needs PipeWire with `pipewire-pulse`, and GTK 4. The first start adds the launcher to your menu.
+Quit Pulsemeeter first: both would manage the same devices.
+
+## Using it
+
+| | |
+|---|---|
+| Route an input to an output | Click **A1**, **B1**… on its strip. Right click for channel mapping and a per-route volume |
+| Choose a program's output | The selector on its card. It is remembered |
+| Open an input's EQ | **EQ** on its strip. Right click switches it on or off without opening it |
+| Edit the EQ | Drag a handle for frequency and gain, scroll for Q, double click to zero the gain |
+| Make a device the system default | **★** on its strip |
+| Quit for real | Settings menu, or the tray icon's menu, or `neomixer quit` |
+
+Closing the window keeps NeoMixer running, since new streams only reach their remembered output
+while it runs. Routes and the EQ also keep playing after you quit, until you log out.
+
+Files: `~/.config/neomixer/config.json` and `~/.local/state/neomixer/neomixer.log`.
+
+## How it works
+
+Virtual devices are PipeWire null sinks, and routes are links between their ports, which is why
+audio does not depend on the app running.
+
+The EQ of an input is a `libpipewire-module-filter-chain` in a process of its own, spliced between
+the device's monitor and its routes. Its nodes are passive, so an EQ never keeps a sound card awake.
+Parameters change through `pw-cli set-param` without touching the audio; only a new filter type
+rebuilds the chain.
+
+Programs are identified by what survives updates: the Flatpak id or process name, not the stream
+name, which is `Factorio 2.1.24` today and `WEBRTC VoiceEngine` for half the internet. A stream's
+target is set through the same `default` metadata store WirePlumber follows.
+
+## Development
+
+```sh
+python -m venv --system-site-packages .venv
+.venv/bin/pip install -e . pytest
+.venv/bin/python -m pytest tests/unit
+
+# The real app against a real, private sound server: real audio is measured through the EQ.
+# Runs in its own PipeWire, WirePlumber, D-Bus and headless KWin, your audio is not touched.
+.venv/bin/python tests/integration/lifecycle_test.py
+```
+
+## License
+
+MIT, see [LICENSE](LICENSE).

@@ -27,7 +27,6 @@ class BuildWithTranslations(_build_py):
 
 
 DATA_FILES = [('share/licenses/neomixer/', ['LICENSE']), ]
-DATA_FILES += gather_data_files('share', '')
 
 setup(
     data_files=DATA_FILES,
