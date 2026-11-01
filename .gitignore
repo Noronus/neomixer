@@ -267,3 +267,6 @@ cython_debug/
 # NeoMixer
 .sandbox/
 .sandbox-*/
+
+# The Fedora package, not a PyInstaller leftover
+!packaging/fedora/neomixer.spec

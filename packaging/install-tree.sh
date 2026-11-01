@@ -23,7 +23,7 @@ chmod 644 "$share/applications/$app.desktop"
 install -Dm644 "$data/icons/hicolor/scalable/apps/$app.svg" "$share/icons/hicolor/scalable/apps/$app.svg"
 install -Dm644 LICENSE "$share/licenses/neomixer/LICENSE"
 
-pybabel -q compile -d locale -D neomixer
+python3 -m babel.messages.frontend -q compile -d locale -D neomixer
 for catalog in locale/*/LC_MESSAGES/neomixer.mo; do
     language=${catalog#locale/}
     install -Dm644 "$catalog" "$share/locale/$language"
