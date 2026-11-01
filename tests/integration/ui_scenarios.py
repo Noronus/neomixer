@@ -1191,6 +1191,41 @@ def starts_hidden(d):
     yield 0.1
 
 
+def live_hold(d):
+    '''
+    For a real desktop, not part of the suite: what Steam writes, against the real session manager.
+    Programs on the default leave it for a moment, and every setting ends as it started.
+    '''
+    import time
+
+    for device_type, kind, others in (('vi', 'sink', 'a'), ('b', 'source', 'hi')):
+        held = next(widget for widget in d.content.device_box[device_type].widgets.values() if widget.device_model.primary)
+        other = next(widget.device_model.name for widget in d.content.device_box[others].widgets.values() if widget.device_model.present)
+        name = held.device_model.name
+        held.hold_widget.set_active(True)
+        yield 0.3
+        d.check(_default(kind) == name, f'{name} is the default {kind}')
+
+        started = time.monotonic()
+        _take_default(kind, other)
+        changed = False
+        while time.monotonic() - started < 3:
+            current = _default(kind)
+            changed = changed or current != name
+            if changed and current == name:
+                break
+            yield 0.002
+        print(f'{kind}: {other} took it, back on {name} after {(time.monotonic() - started) * 1000:.0f} ms')
+        yield 0.5
+        d.check(_default(kind) == name, f'stays on {name}: {_default(kind)}')
+        d.check(held.primary_widget.get_active(), 'the star stayed')
+
+        held.hold_widget.set_active(False)
+        yield 0.2
+        d.check(_default(kind) == name, f'lets go without changing it: {_default(kind)}')
+    yield 2.5  # the autosave
+
+
 def live_check(d):
     '''
     For a real desktop, not part of the suite: real monitors, the real theme and a real output.
