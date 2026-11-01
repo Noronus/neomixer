@@ -33,6 +33,7 @@ window.neomixer headerbar, window.neomixer-eq headerbar {
 .brand-name { font-weight: 800; letter-spacing: 0.04em; }
 .brand-neo { color: @nm_vi; font-weight: 800; letter-spacing: 0.04em; }
 .server-lost { color: @nm_mute; font-weight: 700; }
+.name-taken { color: @nm_mute; font-size: 0.85em; margin-top: 2px; margin-bottom: 4px; }
 
 /* Mixer */
 .section { background-color: @nm_panel; border-radius: 10px; padding: 6px; border: 1px solid @nm_line; }

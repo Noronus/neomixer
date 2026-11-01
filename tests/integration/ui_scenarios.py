@@ -1122,6 +1122,72 @@ def saved_by_sigterm(d):
     yield 0.1
 
 
+def duplicate_name_is_refused(d):
+    '''A device with a name that is taken would be another strip on the same device.'''
+    import time
+    from neomixer.scripts import pmctl
+
+    def add(name, channel_map):
+        popover = d.content.create_device_button['vi'].get_popover()
+        popover.popup()
+        popover.nick_widget.set_option(name)
+        popover.name_widget.set_option(name)
+        popover.combobox_widget.set_active_name(channel_map)
+        started = time.monotonic()
+        d.content._on_device_create(None, popover)
+        return time.monotonic() - started, popover
+
+    def strips():
+        return [w for w in d.content.device_box['vi'].widgets.values() if w.device_model.name == 'twice']
+
+    _, popover = add('twice', 'Mono')
+    yield 0.5
+    d.check(len(strips()) == 1, 'the first one is created')
+    d.check(not popover.get_visible(), 'the form closes, it is not the settings of the new device')
+    d.check(popover.name_widget.get_option() == '' and popover.nick_widget.get_option() == '', 'and is empty next time')
+
+    blocked, popover = add('twice', 'Stereo')
+    print(f'second device of that name: the window hung for {blocked * 1000:.0f} ms')
+    yield 0.5
+    d.check(blocked < 1, f'no freeze: {blocked:.2f}s')
+    d.check(len(strips()) == 1, f'no second strip: {len(strips())}')
+    d.check(pmctl.get_device_by_name('sink', 'twice').channel_count == 1, 'the device stays as it was')
+    d.check('error' in popover.name_widget.input.get_css_classes(), 'the name field shows it')
+    d.check(popover.name_taken_label.get_visible() and popover.get_visible(), 'the form stays open and says why')
+    d.shot('name_taken', popover)
+
+    popover.name_widget.set_option('twice2')
+    d.check('error' not in popover.name_widget.input.get_css_classes(), 'until the name changes')
+    d.check(not popover.name_taken_label.get_visible(), 'and then the hint goes')
+    add('twice2', 'Stereo')
+    yield 0.5
+    other = next(w for w in d.content.device_box['vi'].widgets.values() if w.device_model.name == 'twice2')
+    d.check(other.device_model.channels == 2, 'another name works')
+
+    # The same when renaming
+    other._on_edit_pressed()
+    yield 0.1
+    other.popover.name_widget.set_option('twice')
+    started = time.monotonic()
+    other.popover.confirm_button.emit('clicked')
+    blocked = time.monotonic() - started
+    yield 0.5
+    d.check(blocked < 1, f'renaming to a taken name does not freeze: {blocked:.2f}s')
+    d.check(other.device_model.name == 'twice2', f'and does nothing: {other.device_model.name}')
+    d.check('error' in other.popover.name_widget.input.get_css_classes(), 'but says so')
+
+    # Keeping its own name is no conflict, that is how channels change
+    other.popover.name_widget.set_option('twice2')
+    other.popover.combobox_widget.set_active_name('Mono')
+    other.popover.confirm_button.emit('clicked')
+    yield 0.8
+    d.check(pmctl.get_device_by_name('sink', 'twice2').channel_count == 1, 'its own name is fine')
+
+    for strip_widget in (other, *strips()):
+        strip_widget.popover.remove_button.emit('clicked')
+    yield 0.5
+
+
 def device_management(d):
     '''Adding, changing and removing devices through what the popovers emit.'''
     from neomixer.scripts import pmctl

@@ -727,11 +727,33 @@ class GtkController(SignalModel):
         '''
         self.emit('connection_change', input_type, input_id, output_type, output_id, connection_model)
 
-    def device_new(self, _, device_model):
+    def _name_taken(self, schema, own=None):
+        '''
+        A virtual device is its name to the sound server. Another strip with the same name would
+        be the same device, whatever its own settings say, and wait for ports it never gets.
+        '''
+        if schema['device_class'] != 'virtual':
+            return False
+
+        taken = self.device_repository.find_device_by_key('name', schema['name'], ('vi', 'b'))
+        return any(device is not own for _, _, device in taken)
+
+    def device_new(self, _, schema):
         '''
         Call to device model to create new device model
         '''
-        self.emit('device_new', device_model)
+        is_sink = schema['device_type'] == 'sink'
+        device_type = ('vi' if is_sink else 'b') if schema['device_class'] == 'virtual' else ('a' if is_sink else 'hi')
+        popover = self.content.create_device_button[device_type].get_popover()
+        if self._name_taken(schema):
+            popover.show_name_taken()
+            return
+
+        self.emit('device_new', schema)
+
+        # Left open it looks like the settings of what was just created, and it is not
+        popover.clear()
+        popover.popdown()
 
     def device_remove(self, _, device_type, device_id):
         '''
@@ -743,6 +765,10 @@ class GtkController(SignalModel):
         '''
         Call to device model to update a device settings
         '''
+        if self._name_taken(schema, self.device_repository.get_device(device_type, device_id)):
+            self.content.device_box[device_type].widgets[device_id].popover.show_name_taken()
+            return
+
         self.emit('device_change', schema, device_type, device_id)
 
     def set_app_volume(self, _, volume: int, app_type, key):

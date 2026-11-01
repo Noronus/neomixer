@@ -79,6 +79,7 @@ SCENARIOS = (
     ('settings_apply', 0),
     ('crowded', 0),
     ('device_management', 0),
+    ('duplicate_name_is_refused', 0),
     ('cpu_usage', 0),
     ('set_everything_then_get_killed', -signal.SIGKILL),
     ('REBOOT', None),
@@ -165,7 +166,7 @@ def run_scenario(name, expected, env, shots):
     started = time.monotonic()
     run = subprocess.run([PYTHON, DRIVER, name, shots], env=env, capture_output=True, text=True, timeout=240, check=False)
     lines = [line for line in run.stdout.splitlines() if line.startswith(('ok ', 'FAIL', 'screenshot', 'cpu', 'taken back', 'times taken'))
-             or ' times taken back' in line]
+             or ' times taken back' in line or 'the window hung' in line]
     errors = [line for line in run.stderr.splitlines() if 'Traceback' in line or '[ERROR]' in line or 'Error:' in line
               or 'CRITICAL' in line or ('WARNING' in line and 'Gizmo' not in line)]
     print('\n'.join(lines))

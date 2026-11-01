@@ -27,6 +27,12 @@ class DeviceSettingsPopover(Gtk.Popover):
 
         self.nick_widget = InputWidget(_('Nick: '), tooltip=_('Enter a nickname for the device'))
         self.name_widget = InputWidget(_('Name: '), tooltip=_('Enter a name for the device'))
+        self.name_widget.input.connect('changed', self._on_name_changed)
+        self.name_taken_label = Gtk.Label(
+            label=_('Another device has this name. To change a device, use ⋮ on its strip.'),
+            visible=False, wrap=True, max_width_chars=32, xalign=0
+        )
+        self.name_taken_label.add_css_class('name-taken')
         self.external_widget = Gtk.CheckButton(label=_('Externally Managed'))
         self.external_widget.set_tooltip_text(
             _("Check this if another application or config file owns this device's lifecycle (creates and destroys it), "
@@ -61,6 +67,7 @@ class DeviceSettingsPopover(Gtk.Popover):
         name_box.append(self.nick_widget)
         if self.device_type in ('vi', 'b'):
             name_box.append(self.name_widget)
+            name_box.append(self.name_taken_label)
 
         # Create buttons container
         button_box = Gtk.Box(halign=Gtk.Align.END)
@@ -76,6 +83,18 @@ class DeviceSettingsPopover(Gtk.Popover):
         else:
             main_box.append(self.external_widget)
         main_box.append(button_box)
+
+    def show_name_taken(self):
+        self.name_widget.input.add_css_class('error')
+        self.name_taken_label.set_visible(True)
+
+    def _on_name_changed(self, _):
+        self.name_widget.input.remove_css_class('error')
+        self.name_taken_label.set_visible(False)
+
+    def clear(self):
+        self.nick_widget.set_option('')
+        self.name_widget.set_option('')
 
     def fill_settings(self, device_model):
 
