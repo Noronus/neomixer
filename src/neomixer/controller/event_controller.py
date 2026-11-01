@@ -7,11 +7,14 @@ import traceback
 import concurrent
 
 from neomixer.scripts import pmctl_async
+from neomixer.model.types import PulseEvent
 from neomixer.model.signal_model import SignalModel
 from neomixer.repository.device_repository import DeviceRepository
 from neomixer.model.app_model import AppModel
 
 LOG = logging.getLogger("generic")
+
+RECONNECT_SECONDS = 1.0
 
 
 class EventController(SignalModel):
@@ -35,6 +38,14 @@ class EventController(SignalModel):
             PulseAudio (e.g. hardware unplug, externally-removed virtual).
         pa_primary_change(device_type: str, device_id: str | None):
             Emitted when the primary device changes.
+        pa_client_new(client_index: int, props: dict):
+            Emitted when a program connects to the sound server.
+        pa_client_remove(client_index: int):
+            Emitted when a program disconnects from the sound server.
+        pa_server_lost():
+            Emitted when the connection to the sound server broke.
+        pa_server_back():
+            Emitted when the sound server is back, nothing survived its restart.
 
     Attributes:
         device_repository (DeviceRepository): The repository managing device data.
@@ -47,6 +58,7 @@ class EventController(SignalModel):
         'sink_input': 'app',
         'source_output': 'app',
         'server': 'server',
+        'client': 'client',
     }
 
     _async_loop: asyncio.AbstractEventLoop
@@ -55,6 +67,8 @@ class EventController(SignalModel):
     def __init__(self, device_repository):
         super().__init__()
         self.device_repository = device_repository
+        self._connected = False
+        self._pulse = None
         self._async_loop = asyncio.new_event_loop()
         self._thread = threading.Thread(target=self._async_loop.run_forever, daemon=True)
         self._thread.start()
@@ -99,6 +113,8 @@ class EventController(SignalModel):
         '''
 
         _pa_event_map = {
+            ('client', 'new'): self._handle_client_new_event,
+            ('client', 'remove'): self._handle_client_remove_event,
             ('app', 'new'): self._handle_app_new_event,
             ('app', 'remove'): self._handle_app_remove_event,
             ('app', 'change'): self._handle_app_change_event,
@@ -108,16 +124,52 @@ class EventController(SignalModel):
             ('device', 'remove'): self._handle_device_remove_event,
         }
 
-        await self._seed_pa_index_cache()
+        connected_before = False
+        while True:
+            try:
+                await self._seed_pa_index_cache()
 
-        async for event in pmctl_async.pulse_listener():
-            pm_facility = self._facility_map.get(event.facility)
-            handler = _pa_event_map.get((pm_facility, event.type))
-            if handler:
-                try:
-                    await handler(event)
-                except Exception:
-                    LOG.exception('Error handling %s %s event', pm_facility, event.type)
+                # subscribing is what proves the server is there
+                async for event in self._subscribed_events(connected_before):
+                    pm_facility = self._facility_map.get(event.facility)
+                    handler = _pa_event_map.get((pm_facility, event.type))
+                    if handler:
+                        try:
+                            await handler(event)
+                        except (pulsectl.PulseDisconnected, pulsectl.PulseOperationFailed):
+                            raise
+                        except Exception:
+                            LOG.exception('Error handling %s %s event', pm_facility, event.type)
+
+            except asyncio.CancelledError:
+                raise
+
+            except (pulsectl.PulseError, pulsectl.PulseDisconnected, OSError) as e:
+                LOG.debug('Sound server connection problem: %r', e)
+
+            if self._connected:
+                LOG.warning('Lost the connection to the sound server, waiting for it to come back')
+                self._connected = False
+                self.emit('pa_server_lost')
+
+            connected_before = True
+            self._pa_index_cache.clear()
+            await asyncio.sleep(RECONNECT_SECONDS)
+
+    async def _subscribed_events(self, connected_before):
+        '''
+        Yield sound server events, announcing a server that came back once it is reachable
+        '''
+        async with pmctl_async.pulse_connection('neomixer-listener') as pulse:
+            events = pulse.subscribe_events('sink', 'source', 'sink_input', 'source_output', 'server', 'client')
+            self._pulse = pulse
+            self._connected = True
+            if connected_before:
+                LOG.info('The sound server is back')
+                self.emit('pa_server_back')
+
+            async for event in events:
+                yield PulseEvent(type=event.t._value, facility=event.facility._value, index=event.index)
 
     async def _seed_pa_index_cache(self):
         '''
@@ -134,6 +186,19 @@ class EventController(SignalModel):
         except Exception as e:
             LOG.warning('Failed to seed PA index cache: %s', e)
 
+    async def _handle_client_new_event(self, event):
+        '''
+        A program connected. Many of them connect without ever opening a stream, this is
+        how the app list knows about them before they play anything.
+        '''
+        # A connection of its own would be a new client itself, and so another event
+        props = await pmctl_async.get_client_props(event.index, self._pulse)
+        if props is not None:
+            self.emit('pa_client_new', event.index, props)
+
+    async def _handle_client_remove_event(self, event):
+        self.emit('pa_client_remove', event.index)
+
     async def _handle_app_new_event(self, event: pulsectl.PulseEventInfo):
         '''
         Handle a new application event.
@@ -143,7 +208,7 @@ class EventController(SignalModel):
         '''
         app_type = event.facility
         app_index = event.index
-        app = await pmctl_async.get_app_by_id(app_type, app_index)
+        app = await pmctl_async.get_app_by_id(app_type, app_index, self._pulse)
 
         if app is None:
             return
@@ -171,7 +236,7 @@ class EventController(SignalModel):
         '''
         app_type = event.facility
         app_index = event.index
-        app = await pmctl_async.get_app_by_id(app_type, app_index)
+        app = await pmctl_async.get_app_by_id(app_type, app_index, self._pulse)
         if app is None:
             return
 
@@ -185,7 +250,7 @@ class EventController(SignalModel):
         and emits pa_device_new so routes can be reconnected.
         '''
         try:
-            pa_device = await pmctl_async.get_device_by_id(event.facility, event.index)
+            pa_device = await pmctl_async.get_device_by_id(event.facility, event.index, self._pulse)
         except pulsectl.pulsectl.PulseIndexError:
             return
 
@@ -218,7 +283,7 @@ class EventController(SignalModel):
             event: The event object.
         '''
         try:
-            pa_device = await pmctl_async.get_device_by_id(event.facility, event.index)
+            pa_device = await pmctl_async.get_device_by_id(event.facility, event.index, self._pulse)
         except pulsectl.pulsectl.PulseIndexError:
             return
 
@@ -242,7 +307,7 @@ class EventController(SignalModel):
         '''
         for pa_device_type in ('sink', 'source'):
             pm_device_type = 'vi' if pa_device_type == 'sink' else 'b'
-            primary = await pmctl_async.get_primary(pa_device_type)
+            primary = await pmctl_async.get_primary(pa_device_type, self._pulse)
             primary_name = primary.name if primary else None
             pm_primary_list = self.device_repository.get_primary_device(pm_device_type)
 

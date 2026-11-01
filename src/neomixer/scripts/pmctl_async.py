@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 import pulsectl
 import pulsectl_asyncio
 
-from neomixer.model.types import PulseEvent
+from neomixer.utils.app_identity import is_app_stream
 
 LOG = logging.getLogger('generic')
 
@@ -25,50 +25,56 @@ async def pulse_connection(client_name=None):
         pulse.close()
 
 
-async def get_device_by_id(device_type: str, device_id: int):
-    async with pulse_connection() as pulse:
-        info = pulse.sink_info if device_type == 'sink' else pulse.source_info
-        device = await info(int(device_id))
-        return device
+async def get_device_by_id(device_type: str, device_id: int, pulse):
+    info = pulse.sink_info if device_type == 'sink' else pulse.source_info
+    device = await info(int(device_id))
+    return device
 
 
-async def get_app_by_id(app_type, app_index: int):
-    async with pulse_connection() as pulse:
+async def get_app_by_id(app_type, app_index: int, pulse):
+    try:
+        if app_type == 'sink_input':
+            app = await pulse.sink_input_info(int(app_index))
+            device = await pulse.sink_info(int(app.sink))
+        else:
+            app = await pulse.source_output_info(int(app_index))
+            device = await pulse.source_info(int(app.source))
+    except pulsectl.PulseIndexError:
+        return None
 
-        try:
-            if app_type == 'sink_input':
-                app = await pulse.sink_input_info(int(app_index))
-                device = await pulse.sink_info(int(app.sink))
-            else:
-                app = await pulse.source_output_info(int(app_index))
-                device = await pulse.source_info(int(app.source))
-        except pulsectl.PulseIndexError:
-            return None
+    app.device_name = device.name
 
-        app.device_name = device.name
+    if not is_app_stream(app.proplist, app.name):
+        return None
 
-        if ('application.name' not in app.proplist or
-                '_peak' in app.proplist['application.name'] or
-                app.name == 'audio-volume-change' or
-                app.proplist.get('application.id') == 'org.PulseAudio.pavucontrol' or
-                'nm_route_' in app.proplist.get('node.name', '')):
-            return None
+    # a stream may not carry the process name, its client does
+    props = None
+    if app.client is not None:
+        props = await get_client_props(app.client, pulse)
+    app.client_props = props or {}
 
-        return app
-
-
-async def get_primary(device_type: str):
-    async with pulse_connection() as pulse:
-        try:
-            if device_type == 'sink':
-                return await pulse.sink_default_get()
-            return await pulse.source_default_get()
-        except pulsectl.PulseIndexError:
-            LOG.debug('No resolvable default %s', device_type)
-            return None
+    return app
 
 
-async def subscribe_peak(name, device_type, callback, stream_index=None, rate=30):
+async def get_client_props(client_index: int, pulse):
+    '''Returns the proplist of a pulse client, None if it is gone already.'''
+    try:
+        return (await pulse.client_info(int(client_index))).proplist
+    except pulsectl.PulseIndexError:
+        return None
+
+
+async def get_primary(device_type: str, pulse):
+    try:
+        if device_type == 'sink':
+            return await pulse.sink_default_get()
+        return await pulse.source_default_get()
+    except pulsectl.PulseIndexError:
+        LOG.debug('No resolvable default %s', device_type)
+        return None
+
+
+async def subscribe_peak(name, device_type, callback, stream_index=None, rate=20):
     '''
     Feed peaks of a device, or of one playback stream (by index) on a sink, to `callback`.
     '''
@@ -87,10 +93,3 @@ async def subscribe_peak(name, device_type, callback, stream_index=None, rate=30
 
         async for peak in pulse.subscribe_peak_sample(name, rate, stream_idx=stream_index):
             await callback(peak)
-
-
-async def pulse_listener():
-    async with pulse_connection('neomixer-listener') as pulse:
-        async for event in pulse.subscribe_events('sink', 'source', 'sink_input', 'source_output', 'server'):
-            pm_event = PulseEvent(type=event.t._value, facility=event.facility._value, index=event.index)
-            yield pm_event

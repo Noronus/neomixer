@@ -36,9 +36,8 @@ def _app(**overrides):
 
 class TestAppModel(unittest.TestCase):
 
-    def test_icon_defaults_when_missing(self):
-        app = _app(icon=None)
-        self.assertEqual(app.icon, 'audio-card')
+    def test_empty_icon_means_none(self):
+        self.assertIsNone(_app(icon='').icon)
 
     def test_set_volume(self):
         app = _app()

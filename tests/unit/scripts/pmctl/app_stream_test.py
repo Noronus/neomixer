@@ -104,14 +104,10 @@ class _AppStreamCases:
 
     def test_async_get_app_by_id_resolves_own_device(self):
         pulse = _fake_pulse([self.app], info=mock.AsyncMock)
-
-        @asynccontextmanager
-        async def connection(client_name=None):
-            yield pulse
-
-        with mock.patch.object(pmctl_async, 'pulse_connection', connection):
-            app = asyncio.run(pmctl_async.get_app_by_id(self.APP_TYPE, self.app.index))
+        pulse.client_info = mock.AsyncMock(return_value=mock.Mock(proplist={'application.process.binary': 'proc'}))
+        app = asyncio.run(pmctl_async.get_app_by_id(self.APP_TYPE, self.app.index, pulse))
         assert app is self.app
+        assert app.client_props == {'application.process.binary': 'proc'}
         assert app.device_name == self.DEVICE.name
 
 
@@ -152,14 +148,14 @@ class TestSubscribePeak(unittest.TestCase):
 
     def test_sink_input_meters_its_own_stream(self):
         pulse, received = self._subscribe('sink', 7, [0.5])
-        pulse.subscribe_peak_sample.assert_called_once_with('test_device.monitor', 30, stream_idx=7)
+        pulse.subscribe_peak_sample.assert_called_once_with('test_device.monitor', 20, stream_idx=7)
         pulse.get_source_by_name.assert_not_called()
         assert received == [0.5]
 
     def test_source_device_meters_the_source(self):
         pulse, received = self._subscribe('source', None, [0.5])
         pulse.get_source_by_name.assert_awaited_once_with('test_device')
-        pulse.subscribe_peak_sample.assert_called_once_with('test_device', 30, stream_idx=None)
+        pulse.subscribe_peak_sample.assert_called_once_with('test_device', 20, stream_idx=None)
         assert received == [0.5]
 
 

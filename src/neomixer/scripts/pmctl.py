@@ -10,8 +10,41 @@ import subprocess
 
 from pulsectl import PulseSinkInfo, PulseSourceInfo, PulseSinkInputInfo, PulseSourceOutputInfo
 
+from neomixer.utils.app_identity import is_app_stream
+
 LOG = logging.getLogger('generic')
-PULSE = pulsectl.Pulse('neomixer')
+CLIENT_NAME = 'neomixer'
+CONNECT_TRIES = 30
+CONNECT_RETRY_SECONDS = 0.5
+
+
+def _connect():
+    '''
+    Connect to the sound server, which may still be starting when run at login
+    '''
+    for attempt in range(CONNECT_TRIES):
+        try:
+            return pulsectl.Pulse(CLIENT_NAME)
+        except pulsectl.PulseError:
+            if attempt == CONNECT_TRIES - 1:
+                raise
+            time.sleep(CONNECT_RETRY_SECONDS)
+    return None
+
+
+PULSE = _connect()
+
+
+def reconnect():
+    '''
+    Replace the connection after the sound server restarted, the old one stays dead
+    '''
+    global PULSE
+    try:
+        PULSE.close()
+    except Exception:
+        LOG.debug('Closing the old pulse connection failed', exc_info=True)
+    PULSE = _connect()
 
 
 def create_device(device_type: str, name: str, channels: int, position: list[str]) -> bool:
@@ -542,6 +575,29 @@ def get_ports(port_type: str, device_name: str) -> list[str]:
     return list_ports(port_type).get(device_name, [])
 
 
+def wait_for_device_port(port_type: str, device_name: str, timeout: float = 2.0, interval: float = 0.02) -> bool:
+    '''
+    Poll until a device has ports in PipeWire, a device shows up in pulse slightly before them.
+    Args:
+        port_type (str): 'input' or 'output'.
+        device_name (str): Name of the device.
+        timeout (float): Maximum time to wait in seconds.
+        interval (float): Polling interval in seconds.
+    Returns:
+        bool: True if the device has ports.
+    '''
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            if get_ports(port_type, device_name):
+                return True
+        except RuntimeError:
+            pass
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(interval)
+
+
 def wait_for_ports(port_counts: dict[str, int], timeout: float = 5.0, interval: float = 0.05) -> list[str]:
     '''
     Poll until devices have all their ports in PipeWire.
@@ -830,7 +886,21 @@ def app_by_id(index: int, app_type: str) -> PulseSinkInputInfo | PulseSourceOutp
     app = app_info(index)
     device = get_app_device(app_type, app)
     app.device_name = device.name
+    app.client_props = client_proplist(app.client)
     return app
+
+
+def client_proplist(client_index: int) -> dict:
+    '''Return the proplist of a pulse client, empty if it has none or is gone.'''
+    try:
+        return PULSE.client_info(client_index).proplist
+    except (pulsectl.PulseError, TypeError):
+        return {}
+
+
+def list_clients() -> list:
+    '''List the clients connected to pulse.'''
+    return PULSE.client_list()
 
 
 def get_app_object_id(index: int, app_type: str) -> int | None:
@@ -847,7 +917,7 @@ def get_app_object_id(index: int, app_type: str) -> int | None:
 
 def list_apps(app_type: str) -> list[PulseSinkInputInfo | PulseSourceOutputInfo]:
     '''
-    List all application streams of a given type, filtering out pavucontrol and peak sinks.
+    List all application streams of a given type, filtering out meters, routes and event sounds.
     Args:
         app_type (str): 'sink_input' or 'source_output'.
     Returns:
@@ -857,15 +927,15 @@ def list_apps(app_type: str) -> list[PulseSinkInputInfo | PulseSourceOutputInfo]
     full_app_list = PULSE.sink_input_list() if app_type == 'sink_input' else PULSE.source_output_list()
 
     for app in full_app_list:
-
-        hasname = app.proplist.get('application.name', False)
-        is_peak = '_peak' in app.proplist.get('application.name', '')
-        is_pavucontrol = app.proplist.get('application.id') == 'org.PulseAudio.pavucontrol'
-        is_pm_loopback = 'nm_route_' in app.proplist.get('node.name', '')
-        if is_peak or is_pavucontrol or is_pm_loopback or not hasname:
+        if not is_app_stream(app.proplist, app.name):
             continue
 
-        app.device_name = get_app_device(app_type, app).name
+        device = get_app_device(app_type, app)
+        if device is None:
+            continue
+
+        app.device_name = device.name
+        app.client_props = client_proplist(app.client)
         app_list.append(app)
 
     return app_list

@@ -2,6 +2,7 @@ from typing import Literal
 from pydantic import validator, BaseModel
 from neomixer.scripts import pmctl
 from neomixer.schemas.typing import Volume
+from neomixer.utils.app_identity import app_key, app_label
 
 
 class AppModel(BaseModel):
@@ -28,6 +29,10 @@ class AppModel(BaseModel):
     movable: bool = True
     # pinned to a device, or following the default
     pinned: bool = False
+    # the program this stream belongs to, see utils.app_identity
+    key: str = ''
+    binary: str | None = None
+    media_name: str = ''
 
     @property
     def display_device(self) -> str:
@@ -40,9 +45,9 @@ class AppModel(BaseModel):
     @validator('icon')
     def set_icon(cls, icon):
         '''
-        Some applications don't have an icon name in pulse so we set a default one
+        Some applications give an empty icon name, the card works out a fallback
         '''
-        return icon or 'audio-card'
+        return icon or None
 
     def set_volume(self, val: Volume):
         self.volume = val
@@ -61,13 +66,18 @@ class AppModel(BaseModel):
             "app_type" is either 'sink_input' or 'source_output'
         '''
 
-        object_id = app.proplist.get('object.id')
+        props = app.proplist
+        client_props = getattr(app, 'client_props', None) or {}
+        object_id = props.get('object.id')
         app = cls(
             app_type=app_type,
             index=app.index,
-            label=app.proplist['application.name'],
-            icon=app.proplist.get('application.icon_name'),
-            volume=int(app.volume.values[0] * 100),
+            label=app_label(props, client_props),
+            key=app_key(props, client_props),
+            binary=props.get('application.process.binary') or client_props.get('application.process.binary'),
+            media_name=props.get('media.name', ''),
+            icon=props.get('application.icon_name') or client_props.get('application.icon_name'),
+            volume=round(app.volume.values[0] * 100),
             mute=bool(app.mute),
             device=app.device_name,
             object_id=int(object_id) if object_id is not None else None,
