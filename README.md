@@ -20,6 +20,8 @@ Carneiro. It imports your Pulsemeeter config on first start.
   inputs and outputs. Changes are inaudible to apply, and switching it off is instant, for comparing.
 - **Text size that means something.** Set in points, it comes out the same physical size on every
   monitor, from the size each monitor reports, and follows the window when it moves to another.
+- **The default device stays yours.** A lock on a virtual strip holds it as the default: when
+  something else changes the default, as Steam does when the Frame connects, it switches back.
 - **Reboots lose nothing.** Settings are saved as they change, also on SIGTERM. Virtual devices get
   their volume, mute and primary state back. It recovers by itself if the sound server restarts.
 - **A layout that holds up.** Strips share the window width and programs flow into a grid of their
@@ -30,13 +32,17 @@ Carneiro. It imports your Pulsemeeter config on first start.
 
 ## Install
 
-```sh
-pipx install .
-neomixer
-```
+| | |
+|---|---|
+| CachyOS | `sudo pacman -U neomixer-*.pkg.tar.zst` |
+| Fedora | `sudo dnf install ./neomixer-*.rpm` |
+| From this checkout | `pipx install .`, the first start adds the launcher to your menu |
 
-It needs PipeWire with `pipewire-pulse`, and GTK 4. The first start adds the launcher to your menu.
-Quit Pulsemeeter first: both would manage the same devices.
+It needs PipeWire with `pipewire-pulse`, and GTK 4, which the packages pull in. Quit Pulsemeeter
+first: both would manage the same devices.
+
+On GNOME there is no tray without the AppIndicator extension. NeoMixer still keeps running when
+its window closes: start it again from the menu to get the window back.
 
 ## Using it
 
@@ -47,6 +53,7 @@ Quit Pulsemeeter first: both would manage the same devices.
 | Open a channel's EQ | **EQ** on its strip. Right click switches it on or off without opening it |
 | Edit the EQ | Drag a handle for frequency and gain, scroll for Q, double click to zero the gain |
 | Make a device the system default | **★** on its strip |
+| Keep it the default, whatever other programs do | The lock on its strip |
 | Quit for real | Settings menu, or the tray icon's menu, or `neomixer quit` |
 
 Closing the window keeps NeoMixer running, since new streams only reach their remembered output
@@ -79,6 +86,12 @@ python -m venv --system-site-packages .venv
 # The real app against a real, private sound server: real audio is measured through the EQ.
 # Runs in its own PipeWire, WirePlumber, D-Bus and headless KWin, your audio is not touched.
 .venv/bin/python tests/integration/lifecycle_test.py
+
+# The packages, each built in a clean container of its distro, from what is committed
+packaging/build.sh
+
+# Installs them in clean containers, and runs all of the above against what got installed
+packaging/test.sh
 ```
 
 ## License

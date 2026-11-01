@@ -25,8 +25,20 @@ def _write_if_changed(path, content):
         out.write(content)
 
 
+def has_system_launcher():
+    '''
+    A distro package brings the launcher itself, and takes it along when it is removed. A copy
+    in the home directory would outlive the package.
+    '''
+    data_dirs = os.getenv('XDG_DATA_DIRS') or '/usr/local/share:/usr/share'
+    return any(os.path.exists(os.path.join(data_dir, 'applications', f'{APP_ID}.desktop')) for data_dir in data_dirs.split(':'))
+
+
 def install_launcher():
-    '''Install or update the launcher and icon for the current user.'''
+    '''Install or update the launcher and icon for the current user, if nothing else provides them.'''
+    if has_system_launcher():
+        return
+
     try:
         with open(os.path.join(DATA_DIR, f'{APP_ID}.desktop'), encoding='utf-8') as template:
             desktop_entry = template.read().replace('@EXEC@', launch_command())

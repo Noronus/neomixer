@@ -1,0 +1,29 @@
+# Maintainer: NeoMixer contributors
+pkgname=neomixer
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Virtual audio mixer for PipeWire, with an EQ on every channel and remembered program routing'
+arch=('any')
+license=('MIT')
+depends=(
+  'gtk4'
+  'libpulse'
+  'pipewire'
+  'pipewire-audio'
+  'pipewire-pulse'
+  'python'
+  'python-cairo'
+  'python-gobject'
+  'python-pulsectl'
+  'python-pulsectl-asyncio'
+  'python-pydantic'
+  'wireplumber'
+)
+makedepends=('python-babel')
+source=("$pkgname-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+package() {
+  cd "$pkgname-$pkgver"
+  packaging/install-tree.sh "$pkgdir"
+}

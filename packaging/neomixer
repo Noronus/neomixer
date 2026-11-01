@@ -1,0 +1,13 @@
+#!/usr/bin/python3
+'''
+Starts the packaged NeoMixer. Its code has a directory of its own instead of site-packages: that
+path has the Python version in it, and nothing rebuilds a package that was passed on by hand, so
+it would stop working with the next Python update.
+'''
+import sys
+
+sys.path.insert(0, '/usr/lib/neomixer')
+
+from neomixer.main import main  # noqa: E402
+
+sys.exit(main())
