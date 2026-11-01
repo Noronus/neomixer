@@ -32,7 +32,7 @@ arch)
 fedora)
     dnf -y install /packages/neomixer-*.rpm || exit 1
     rpm -ql neomixer >/tmp/package-files
-    test_packages=(kwin ffmpeg-free python3-pytest dejavu-sans-fonts desktop-file-utils pulseaudio-utils util-linux dbus-daemon glib2 findutils procps-ng)
+    test_packages=(kwin mutter ffmpeg-free python3-pytest dejavu-sans-fonts desktop-file-utils pulseaudio-utils util-linux dbus-daemon glib2 findutils procps-ng)
     install_test_packages() { dnf -y -q install "${test_packages[@]}"; }
     remove_package() { dnf -y remove neomixer; }
     ;;
@@ -100,6 +100,15 @@ as_tester tests/integration/sandbox.sh start /work/.sandbox-eq
 as_tester bash -c 'source /work/.sandbox-eq/env; PYTHONPATH=/usr/lib/neomixer:/work python3 -m pytest -q -p no:cacheprovider tests/integration/eq_audio_test.py' | tail -3
 [ "${PIPESTATUS[0]}" -eq 0 ] || failed=1
 as_tester tests/integration/sandbox.sh stop /work/.sandbox-eq
+
+if command -v mutter >/dev/null; then
+    echo "=== on GNOME's compositor"
+    as_tester NEOMIXER_COMPOSITOR=mutter NEOMIXER_CODE=/usr/lib/neomixer python3 tests/integration/lifecycle_test.py /work/shots-gnome \
+        first_run assign_and_restart_program default_is_held text_size_setting close_keeps_running output_eq demo_screenshot
+    [ $? -eq 0 ] || failed=1
+    mkdir -p /shots/gnome
+    cp -r /work/shots-gnome/. /shots/gnome/ 2>/dev/null
+fi
 
 echo "=== removing it"
 remove_package >/dev/null || failed=1

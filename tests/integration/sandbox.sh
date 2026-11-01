@@ -4,6 +4,7 @@
 # it can never grab a real sound card.
 #
 #   sandbox.sh start [dir]   start it, default dir is $NEOMIXER_SANDBOX or ./.sandbox
+#                            with NEOMIXER_COMPOSITOR=mutter on GNOME's compositor instead of KWin
 #   sandbox.sh stop  [dir]   stop it and delete its runtime dir
 #   sandbox.sh audio-restart [dir]   restart the audio daemons, as a package update can do
 #   sandbox.sh reboot [dir]  what a reboot does to the audio side
@@ -95,8 +96,12 @@ unset DISPLAY PULSE_SERVER PIPEWIRE_REMOTE PIPEWIRE_RUNTIME_DIR PULSE_RUNTIME_PA
 ENV
     start_audio || exit 1
     ( source "$SB/env"
-      nohup kwin_wayland --virtual --no-lockscreen --no-global-shortcuts --no-kactivities \
-          --socket wl-sandbox --output-count 2 --width 1920 --height 1080 >"$SB/log/kwin.log" 2>&1 &
+      if [ "${NEOMIXER_COMPOSITOR:-kwin}" = mutter ]; then
+          nohup mutter --headless --wayland --no-x11 --wayland-display wl-sandbox --virtual-monitor 1920x1080 >"$SB/log/kwin.log" 2>&1 &
+      else
+          nohup kwin_wayland --virtual --no-lockscreen --no-global-shortcuts --no-kactivities \
+              --socket wl-sandbox --output-count 2 --width 1920 --height 1080 >"$SB/log/kwin.log" 2>&1 &
+      fi
       echo $! >"$SB/pid/kwin" )
     for _ in $(seq 100); do
         [ -S "$SB/run/wl-sandbox" ] && break
