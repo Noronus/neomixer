@@ -9,6 +9,8 @@ from gi.repository import Gtk, GLib, GObject  # noqa: E402
 
 _ = gettext.gettext
 
+UNITY = 100  # 0 dB
+
 
 class VolumeWidget(Gtk.Scale):
 
@@ -115,6 +117,20 @@ def volume_to_db(volume: float) -> float:
     if volume <= 0:
         return None
     return 60 * math.log10(volume / 100)
+
+
+def snap_to_unity(volume: float, target: float, snap_db: float) -> float:
+    '''
+    Where a step from volume to target ends. Toward 0 dB it stops there, if it lands within snap_db
+    of it or would go past it: otherwise steps of 5 from 98 never hit it. Away from 0 dB it is always
+    free, or small steps could never leave it. No snap_db, no snapping.
+    '''
+    if snap_db <= 0 or volume == UNITY or (target > volume) != (volume < UNITY):
+        return target
+
+    passes = (volume < UNITY) == (target >= UNITY)
+    close = target > 0 and abs(volume_to_db(target)) <= snap_db
+    return UNITY if passes or close else target
 
 
 def format_db(volume: float) -> str:

@@ -17,9 +17,10 @@ _ = gettext.gettext
 NO_KEY = '—'
 MIN_STEP = 1
 MAX_STEP = 25
+MAX_SNAP_DB = 6
 # Roughly, so that all fits at the text sizes people use. Past that it scrolls.
 WINDOW_WIDTH = 780
-HEIGHT_AROUND_LIST = 190
+HEIGHT_AROUND_LIST = 230
 HEIGHT_PER_DEVICE = 40
 HEIGHT_PER_SECTION = 44
 MAX_WINDOW_HEIGHT = 900
@@ -63,9 +64,10 @@ class HotkeyWindow(Gtk.Window):
         'apply': (GObject.SignalFlags.RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_PYOBJECT,)),
         'configure': (GObject.SignalFlags.RUN_FIRST, GObject.TYPE_NONE, ()),
         'step_changed': (GObject.SignalFlags.RUN_FIRST, GObject.TYPE_NONE, (int,)),
+        'snap_changed': (GObject.SignalFlags.RUN_FIRST, GObject.TYPE_NONE, (float,)),
     }
 
-    def __init__(self, step, **kwargs):
+    def __init__(self, step, snap_db, **kwargs):
         super().__init__(title=_('Hotkeys'), default_width=WINDOW_WIDTH, **kwargs)
         self.add_css_class('neomixer')
         self.devices = []
@@ -95,6 +97,18 @@ class HotkeyWindow(Gtk.Window):
         step_row.append(step_label)
         step_row.append(self.step)
 
+        self.snap = Gtk.SpinButton.new_with_range(0, MAX_SNAP_DB, 0.1)
+        self.snap.set_digits(1)
+        self.snap.set_value(snap_db)
+        self.snap.set_numeric(True)
+        self.snap.connect('value-changed', lambda spin: self.emit('snap_changed', spin.get_value()))
+        snap_row = Gtk.Box(spacing=8)
+        snap_row.set_tooltip_text(
+            _('A press toward 0 dB that lands this close to it, or would go past it, stops at 0 dB. 0 switches this off.')
+        )
+        snap_row.append(Gtk.Label(label=_('Snap to 0 dB within ± (dB)'), xalign=0))
+        snap_row.append(self.snap)
+
         self.status = Gtk.Label(xalign=0, wrap=True, hexpand=True, natural_wrap_mode=Gtk.NaturalWrapMode.WORD)
         self.configure_button = Gtk.Button(label=_('Desktop settings'), visible=False)
         self.configure_button.set_tooltip_text(_("Open your desktop's own settings for these keys"))
@@ -113,6 +127,7 @@ class HotkeyWindow(Gtk.Window):
         main.append(self.command)
         main.append(scrolled)
         main.append(step_row)
+        main.append(snap_row)
         main.append(buttons)
         self.set_child(main)
 

@@ -61,7 +61,8 @@ Closing the window keeps NeoMixer running, since new streams only reach their re
 while it runs. Routes and the EQ also keep playing after you quit, until you log out.
 
 Hotkeys go through the desktop's global shortcuts portal, the one way a program gets keys on Wayland:
-KDE and GNOME have it. Holding a volume key keeps going up to 0 dB, past that takes a press each. On a
+KDE and GNOME have it. Holding a volume key keeps going up to 0 dB, past that takes a press each. A press
+toward 0 dB snaps to it when it lands within 1 dB, or would go past it; that is a setting in the same window. On a
 desktop without it, bind keys in its settings to `neomixer hotkey <hi|vi|a|b> <id> <mute|up|down>`.
 
 Files: `~/.config/neomixer/config.json` and `~/.local/state/neomixer/neomixer.log`.

@@ -1818,6 +1818,11 @@ def hotkeys_work(d):
             d.check(round(strip_widget.volume_widget.get_value()) == before + change, f'{device_type}: {action} on the fader')
             before = _volume(device)
 
+    # How close to 0 dB snaps is a setting there
+    window.snap.set_value(2.0)
+    d.check(d.app.config_model.snap_db == 2.0, 'the snap range is a setting')
+    window.snap.set_value(1.0)
+
     # Also without the window, it is about what happens in other programs
     window.close()
     d.ui.hide_window()
@@ -1872,8 +1877,36 @@ def hotkeys_work(d):
     portal.release(mute_shortcut)
     yield 0.2
 
+    # Snapping to 0 dB
+    def press_from(shortcut_to_press, start):
+        strip_widget.volume_widget.set_value(start)
+        yield 0.1
+        portal.press(shortcut_to_press)
+        portal.release(shortcut_to_press)
+        yield 0.15
+
+    yield from press_from(up, 98)
+    d.check(_volume(device) == 100, f'98 up by 5 stops at 0 dB: {_volume(device)}')
+    yield from press_from(down, 103)
+    d.check(_volume(device) == 100, f'103 down by 5 too: {_volume(device)}')
+    yield from press_from(down, 100)
+    d.check(_volume(device) == 95, f'away from 0 dB is free: {_volume(device)}')
+    yield from press_from(up, 100)
+    d.check(_volume(device) == 105, f'also upward: {_volume(device)}')
+    d.app.config_model.volume_step = 1
+    yield from press_from(down, 100)
+    d.check(_volume(device) == 99, f'small steps can leave it: {_volume(device)}')
+    yield from press_from(up, 98)
+    d.check(_volume(device) == 100, f'and come back from within the range: {_volume(device)}')
+    d.app.config_model.volume_step = 5
+    d.app.config_model.snap_db = 0
+    yield from press_from(up, 98)
+    d.check(_volume(device) == 103, f'0 switches it off: {_volume(device)}')
+    d.app.config_model.snap_db = 1.0
+
     # The step is a setting
-    d.config = d.app.config_model
+    strip_widget.volume_widget.set_value(50)
+    yield 0.1
     d.app.config_model.volume_step = 10
     portal.press(down)
     portal.release(down)

@@ -641,6 +641,12 @@ msgstr "Lautstärkeschritt pro Tastendruck (%)"
 msgid "Holding a key keeps going, up to 0 dB. Louder than that takes a press each."
 msgstr "Gedrückt halten läuft weiter, bis 0 dB. Lauter geht nur mit einzelnen Tastendrücken."
 
+msgid "A press toward 0 dB that lands this close to it, or would go past it, stops at 0 dB. 0 switches this off."
+msgstr "Ein Tastendruck Richtung 0 dB, der so nah daran landet oder darüber hinausginge, stoppt bei 0 dB. 0 schaltet das aus."
+
+msgid "Snap to 0 dB within ± (dB)"
+msgstr "Bei 0 dB einrasten im Bereich ± (dB)"
+
 msgid "Desktop settings"
 msgstr "Desktop-Einstellungen"
 

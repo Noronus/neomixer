@@ -18,6 +18,7 @@ from neomixer.model.device_model import DeviceModel
 
 from neomixer.clients.gtk.text_size import TextScaler
 from neomixer.clients.gtk.widgets.content import Content, SECTION_ORDER
+from neomixer.clients.gtk.widgets.common.volume_widget import snap_to_unity
 from neomixer.clients.gtk.widgets.device.device_widget import DeviceWidget
 from neomixer.clients.gtk.widgets.app.app_widget import AppWidget
 from neomixer.clients.gtk.widgets.app.app_dropdown import AppDropDown
@@ -530,10 +531,11 @@ class GtkController(SignalModel):
             self.hotkey_window.present()
             return
 
-        self.hotkey_window = HotkeyWindow(self.config_model.volume_step, transient_for=self.window)
+        self.hotkey_window = HotkeyWindow(self.config_model.volume_step, self.config_model.snap_db, transient_for=self.window)
         self.hotkey_window.connect('apply', lambda _, edits: self.emit('hotkeys_apply', edits))
         self.hotkey_window.connect('configure', lambda _: self.emit('hotkeys_configure'))
         self.hotkey_window.connect('step_changed', self._on_hotkey_step_changed)
+        self.hotkey_window.connect('snap_changed', self._on_hotkey_snap_changed)
         self.hotkey_window.connect('close-request', self._on_hotkey_window_close)
         self.hotkey_window.set_devices(self._hotkey_devices())
         self.text_scaler.track(self.hotkey_window)
@@ -547,6 +549,9 @@ class GtkController(SignalModel):
 
     def _on_hotkey_step_changed(self, _, step):
         self.config_model.volume_step = step
+
+    def _on_hotkey_snap_changed(self, _, snap_db):
+        self.config_model.snap_db = snap_db
 
     def _hotkey_devices(self):
         return [
@@ -575,7 +580,7 @@ class GtkController(SignalModel):
 
         volume = widget.volume_widget.get_value()
         step = self.config_model.volume_step
-        target = volume + step if action == 'up' else volume - step
+        target = snap_to_unity(volume, volume + step if action == 'up' else volume - step, self.config_model.snap_db)
         if held and action == 'up':
             target = min(target, max(volume, HOTKEY_HOLD_CEILING))
         widget.volume_widget.set_value(target)

@@ -31,6 +31,7 @@ class ConfigModel(BaseModel):
     show_offline_apps: bool = True
     apps_filter: str = 'all'
     volume_step: int = 5  # how far one press of a hotkey moves a fader
+    snap_db: float = 1.0  # a press of a hotkey that lands this close to 0 dB stops there, 0 is off
     text_size: float = 9.0  # in points, on the monitor: see clients.gtk.text_size
     window_width: int = 1500
     window_height: int = 860
