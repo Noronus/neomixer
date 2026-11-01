@@ -8,9 +8,8 @@ from gi.repository import Gtk, Gdk, GLib
 
 _ = gettext.gettext
 
-GITHUB_URL = 'https://github.com/theRealCarneiro/neomixer'
-DISCORD_URL = 'https://discord.gg/ekWt9NuEWv'
-APP_ICON_NAME = 'NeoMixer'
+UPSTREAM_URL = 'https://github.com/theRealCarneiro/pulsemeeter'
+APP_ICON_NAME = 'org.neomixer.NeoMixer'
 FALLBACK_ICON_NAME = 'multimedia-volume-control'
 
 GUIDE_SECTIONS = [
@@ -18,7 +17,7 @@ GUIDE_SECTIONS = [
         _('What is NeoMixer?'),
         _('NeoMixer is a virtual audio mixer and router built on top of PipeWire. '
           'It lets you create virtual devices and freely route audio between your '
-          'inputs and outputs, controlling volume and muting along the way.')
+          'inputs and outputs, with volume, mute and an equalizer on the way.')
     ),
     (
         _('The four device types'),
@@ -29,30 +28,39 @@ GUIDE_SECTIONS = [
     ),
     (
         _('Routing'),
-        _('Audio always flows from an input to an output: Hardware and Virtual Inputs '
-          'connect to Hardware and Virtual Outputs. Use the connection toggles on each '
-          'input device to send its audio to the outputs you want.')
+        _('Audio always flows from an input to an output: the A and B buttons on each input '
+          'send its audio to that output. Right click one for its channel mapping and its '
+          'own volume.')
     ),
     (
-        _('Cleanup'),
-        _('NeoMixer has the ability to leave or cleanup the virtual device and routes '
-          'it creates with the cleanup setting. If NeoMixer is closed, it won\'t be '
-          'able to monitor for hotplugging')
+        _('Programs'),
+        _('Every program that connects to the sound server stays in the list, whether it is '
+          'playing or not. What you choose for a program is remembered: its streams go to that '
+          'output whenever it starts, also after a reboot. You can set a program up while it is '
+          'not running, or add one with the + button before it ever played anything.')
+    ),
+    (
+        _('Equalizer'),
+        _('The EQ button on an input opens its parametric equalizer. Drag a band on the curve '
+          'to change its frequency and gain, scroll to change its width. Switching it off passes '
+          'the audio through unchanged, so you can compare. Right clicking the EQ button does '
+          'that without opening the window.')
+    ),
+    (
+        _('Running in the background'),
+        _('New streams only go to their remembered output while NeoMixer runs, so closing the '
+          'window keeps it running with an icon in the tray. Routes and the EQ also keep working '
+          'after you quit, until you log out. Turn on "Start at login" to have all of it from '
+          'the start.')
     ),
     (
         _('Primary device'),
-        _('Marking a device as primary makes it the default that new applications attach '
+        _('Marking a device as primary (★) makes it the default that new applications attach '
           'to automatically. This sets the primary in PipeWire itself.')
     ),
-    (
-        _('VU meters & settings'),
-        _('VU meters show the live volume peak of each device. Open the settings menu '
-          'to toggle VU meters, enable cleanup on exit, and switch between the available '
-          'layouts. Enabling VU Meters will show the inputs "in use" by NeoMixer.')
-    )
 ]
 
-FOOTER = _('You can reopen this guide any time from the information button in the settings menu.')
+FOOTER = _('You can reopen this guide any time from the settings menu.')
 
 
 class WelcomeWindow(Gtk.Window):
@@ -62,6 +70,7 @@ class WelcomeWindow(Gtk.Window):
 
     def __init__(self, **kwargs):
         super().__init__(title=_('Welcome to NeoMixer!'), **kwargs)
+        self.add_css_class('neomixer')
         self.set_default_size(560, 640)
 
         mainbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10,
@@ -121,16 +130,8 @@ class WelcomeWindow(Gtk.Window):
 
         source_link = Gtk.Label()
         source_link.set_markup('<a href="%s">%s</a>'
-                               % (GITHUB_URL, GLib.markup_escape_text(_('View Source'))))
+                               % (UPSTREAM_URL, GLib.markup_escape_text(_('Based on Pulsemeeter'))))
         links.append(source_link)
-
-        links.append(Gtk.Separator(orientation=Gtk.Orientation.VERTICAL,
-                                   margin_top=2, margin_bottom=2))
-
-        discord_link = Gtk.Label()
-        discord_link.set_markup('<a href="%s">%s</a>'
-                                % (DISCORD_URL, GLib.markup_escape_text(_('Discord'))))
-        links.append(discord_link)
 
         title_box.append(links)
 

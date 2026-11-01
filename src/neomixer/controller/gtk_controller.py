@@ -5,20 +5,24 @@ import traceback
 import threading
 
 from concurrent.futures._base import CancelledError
+
+import pulsectl
+
 from neomixer.scripts import pmctl
 from neomixer.scripts.pmctl_async import subscribe_peak
+from neomixer.utils import autostart
 
 from neomixer.model.signal_model import SignalModel
 from neomixer.model.config_model import ConfigModel
 from neomixer.model.device_model import DeviceModel
-from neomixer.model.app_model import AppModel
 
-from neomixer.clients.gtk.layouts import layout_manager
 from neomixer.clients.gtk.widgets.content import Content
 from neomixer.clients.gtk.widgets.device.device_widget import DeviceWidget
 from neomixer.clients.gtk.widgets.app.app_widget import AppWidget
 from neomixer.clients.gtk.widgets.app.app_dropdown import AppDropDown
+from neomixer.clients.gtk.widgets.eq.eq_window import EqWindow
 from neomixer.clients.gtk.widgets.welcome_window import WelcomeWindow
+from neomixer.settings import APP_ID
 
 # pylint: disable=wrong-import-order,wrong-import-position
 from gi import require_version as gi_require_version
@@ -29,6 +33,10 @@ from gi.repository import Gtk, GLib  # noqa: E402
 LOG = logging.getLogger("generic")
 
 _ = gettext.gettext
+
+# An app can open many streams, the meter only needs to show that it is playing
+MAX_METERED_STREAMS = 4
+EQ_APPLY_DELAY_MS = 30
 
 
 class GtkController(SignalModel):
@@ -52,12 +60,20 @@ class GtkController(SignalModel):
             Emitted when a device is removed.
         device_change(schema, device_type: str, device_id: str):
             Emitted when a device's settings are updated.
-        app_volume(app_type: str, app_index: str, volume: int):
-            Emitted when an application's volume is changed.
-        app_mute(app_type: str, app_index: str, state: bool):
-            Emitted when an application's mute state is changed.
-        app_device(app_type: str, app_index: str, device_nick: str):
-            Emitted when an application's device is changed.
+        eq_change(device_type: str, device_id: str):
+            Emitted when a device's EQ settings changed.
+        app_volume(app_type: str, key: str, volume: int):
+            Emitted when a program's volume is changed.
+        app_mute(app_type: str, key: str, state: bool):
+            Emitted when a program's mute state is changed.
+        app_device(app_type: str, key: str, device_name: str):
+            Emitted when a program's device is changed.
+        app_forget(app_type: str, key: str):
+            Emitted when a program should be removed from the list.
+        app_add(app_type: str, key: str, label: str, icon, binary):
+            Emitted when a program should be added to the list.
+        quit():
+            Emitted when the user asks to quit.
         pa_hotplug(device_type: str, device_id: str):
             Emitted on the GTK main thread when a configured device reappears
             in PulseAudio and needs the device controller to re-init/reconnect.
@@ -73,7 +89,6 @@ class GtkController(SignalModel):
 
     vumeter_tasks: dict[str, dict[str, asyncio.Task]]
     device_handlers: dict[str, dict[str, int]]
-    app_handlers: dict[str, dict[str, int]]
 
     def __init__(self, device_repository):
 
@@ -90,29 +105,119 @@ class GtkController(SignalModel):
         self.window = None
         self.content = None
         self.welcome_window = None
-        self.vumeter_tasks = {'a': {}, 'b': {}, 'vi': {}, 'hi': {}, 'sink_input': {}, 'source_output': {}}
+        self.status_label = None
+        self.vumeter_tasks = {'a': {}, 'b': {}, 'vi': {}, 'hi': {}}
+        self.app_meter_tasks = {}
         self.device_handlers = {'a': {}, 'b': {}, 'vi': {}, 'hi': {}}
-        self.app_handlers = {'sink_input': {}, 'source_output': {}}
+        self.eq_windows = {}
+        self.eq_apply_sources = {}
+        self.server_lost = False
 
+    #
+    # # Window
+    #
     def create_window(self, application):
-        self.create_content(self.config_model.layout)
+        self.create_content()
         self.window = Gtk.Window(title='NeoMixer', application=application)
+        self.window.add_css_class('neomixer')
+        self.window.set_icon_name(APP_ID)
+        self.window.set_titlebar(self._build_header())
         self.window.set_default_size(self.config_model.window_width, self.config_model.window_height)
         self.window.set_child(self.content)
+        if self.config_model.mixer_height <= 0:
+            self.content.default_split(self.config_model.window_height)
         self.connect_window_gtk_events()
 
+        self.load_app_combobox()
         self.load_device_list()
-        self.load_app_list()
         return self.window
 
-    def create_content(self, layout):
-        arrange_content = layout_manager.get_arrange_content(layout)
-        self.content = Content()
-        arrange_content(self.content)
+    def _build_header(self):
+        header = Gtk.HeaderBar()
+        logo = Gtk.Image(icon_name=APP_ID, pixel_size=20)
+        neo = Gtk.Label(label='Neo')
+        neo.add_css_class('brand-neo')
+        mixer = Gtk.Label(label='Mixer')
+        mixer.add_css_class('brand-name')
+        self.status_label = Gtk.Label(label=_('Sound server is gone, waiting for it…'), visible=False, margin_start=10)
+        self.status_label.add_css_class('server-lost')
+        title = Gtk.Box()
+        title.append(logo)
+        logo.set_margin_end(6)
+        title.append(neo)
+        title.append(mixer)
+        title.append(self.status_label)
+        header.set_title_widget(title)
+        header.pack_end(self.content.settings_button)
+        return header
 
+    def create_content(self):
+        self.content = Content(
+            apps_filter=self.config_model.apps_filter,
+            show_offline=self.config_model.show_offline_apps,
+            mixer_height=self.config_model.mixer_height,
+        )
         self.connect_content_gtk_events()
-        self.content.settings_box.fill_settings(self.config_model)
+        self._fill_settings()
         return self.content
+
+    def show_window(self):
+        was_visible = self.window.get_visible()
+        self.window.present()
+        if not was_visible:
+            self.start_all_vumeters()
+
+    def hide_window(self):
+        self.save_window_state()
+        self.window.set_visible(False)
+        for eq_window in self.eq_windows.values():
+            eq_window.set_visible(False)
+        self.stop_all_vumeters()
+
+    def toggle_window(self):
+        if self.window.get_visible():
+            self.hide_window()
+        else:
+            self.show_window()
+
+    def save_window_state(self):
+        width, height = self.window.get_default_size()
+        self.config_model.window_width = width
+        self.config_model.window_height = height
+        self.config_model.mixer_height = self.content.paned.get_position()
+
+    def on_close_request(self, _):
+        '''
+        Called when the main window gets closed
+        '''
+        self.save_window_state()
+        if self.config_model.background:
+            self.hide_window()
+            return True
+        return False
+
+    def set_server_lost(self, lost):
+        self.server_lost = lost
+        self.status_label.set_visible(lost)
+        self.stop_all_vumeters()
+        if not lost and self.window.get_visible():
+            self.start_all_vumeters()
+        if not lost:
+            self.refresh_all_warnings()
+
+    #
+    # # Device widgets
+    #
+    def _strip_tag(self, device_type, device_id):
+        if device_type not in ('a', 'b'):
+            return ''
+        ids = sorted(self.device_repository.get_devices_by_type(device_type), key=int)
+        return f'{device_type.upper()}{ids.index(device_id) + 1}' if device_id in ids else ''
+
+    def _refresh_strip_tags(self):
+        for device_type in ('a', 'b'):
+            for device_id, widget in self.content.device_box[device_type].widgets.items():
+                widget.set_tag(self._strip_tag(device_type, device_id))
 
     def create_device_widget(self, device_type, device_id, device_model, refresh=False):
         '''
@@ -120,15 +225,15 @@ class GtkController(SignalModel):
             "device_type" is [vi, hi, a, b]
             "device" is the device widget to insert in the box
         '''
-        arrange_device = layout_manager.get_arrange_device(self.config_model.layout)
-        device_widget = DeviceWidget(device_model)
-        arrange_device(device_widget)
+        device_widget = DeviceWidget(device_model, self.content.routes_group, self._strip_tag(device_type, device_id))
         self.content.device_box[device_type].add_widget(device_id, device_widget)
         self.connect_device_gtk_events(device_type, device_id, device_widget)
-        self.append_app_combobox(device_model)
+        self.content.relayout_sections()
 
         if refresh:
             self.reload_connection_widgets()
+            self._refresh_strip_tags()
+            self.load_app_combobox()
 
         return device_widget
 
@@ -138,12 +243,16 @@ class GtkController(SignalModel):
             "device_type" is [vi, hi, a, b]
             "device" is the device widget to remove from the box
         '''
+        self._close_eq_window(device_type, device_id)
         device_widget = self.content.device_box[device_type].remove_widget(device_id)
-        self.pop_app_combobox(device_widget.device_model)
+        self.content.routes_group.remove_widget(device_widget.routes_box)
         device_widget.run_dispose()
+        self.content.relayout_sections()
 
         if refresh:
             self.reload_connection_widgets()
+            self._refresh_strip_tags()
+            self.load_app_combobox()
 
         return device_widget
 
@@ -151,23 +260,11 @@ class GtkController(SignalModel):
         device_widget = self.content.device_box[device_type].widgets[device_id]
         device_widget.fill_settings()
         self.reload_connection_widgets()
-        self.append_app_combobox(device_model)
+        self.load_app_combobox()
 
     def on_device_widget_destroy(self, _, device_type, device_id):
         self.stop_vumeter(device_type, device_id)
         self.device_handlers[device_type].pop(device_id, None)
-
-    def on_app_widget_destroy(self, _, app_type, app_id):
-        self.stop_vumeter(app_type, app_id)
-        self.app_handlers[app_type].pop(app_id, None)
-
-    def on_window_destroy(self, _):
-        '''
-        Called when the main window gets destroyed
-        '''
-        width, height = self.window.get_default_size()
-        self.config_model.window_width = width
-        self.config_model.window_height = height
 
     def reload_connection_widgets(self):
         '''
@@ -176,26 +273,19 @@ class GtkController(SignalModel):
         for device_type in ('hi', 'vi'):
             for _, device in self.content.device_box[device_type].widgets.items():
                 device.reload_connection_widgets()
+        self.refresh_output_sources()
 
-    def create_app_widget(self, app_type, app_index, app_model):
-        '''
-        Create a new app widget from a model, insert it and return it
-        '''
-        arrange_app = layout_manager.get_arrange_app(self.config_model.layout)
-        app_widget = AppWidget(app_model)
-        arrange_app(app_widget)
-        self.content.app_box[app_type].add_widget(app_index, app_widget)
-        self.connect_app_gtk_events(app_type, app_index, app_widget)
-        return app_widget
-
-    def remove_app_widget(self, app_type, app_index):
-        '''
-        Remove app widget and return it
-        '''
-        app_widget = self.content.app_box[app_type].remove_widget(app_index)
-        if app_widget:
-            app_widget.run_dispose()
-        return app_widget
+    def refresh_output_sources(self):
+        '''Have each output show which inputs play into it.'''
+        for output_type in ('a', 'b'):
+            for output_id, widget in self.content.device_box[output_type].widgets.items():
+                widget.set_sources([
+                    input_device.nick
+                    for input_type in ('hi', 'vi')
+                    for input_device in self.device_repository.get_devices_by_type(input_type).values()
+                    if input_device.connections[output_type].get(output_id) is not None
+                    and input_device.connections[output_type][output_id].state
+                ])
 
     def load_device_list(self):
         '''
@@ -204,50 +294,44 @@ class GtkController(SignalModel):
         for device_type, device_dict in self.device_repository.get_all_devices().items():
             for device_id, device_model in device_dict.items():
                 self.create_device_widget(device_type, device_id, device_model)
+        self.refresh_output_sources()
 
-    def load_app_list(self):
-        '''
-        Load the current available pulseaudio sink inputs and source outputs
-        '''
+    #
+    # # Programs
+    #
+    def app_entry_new(self, entry):
+        card = AppWidget(entry)
+        card.connect('app_volume', self.set_app_volume, entry.app_type, entry.key)
+        card.connect('app_mute', self.set_app_mute, entry.app_type, entry.key)
+        card.connect('app_device', self.set_app_device, entry.app_type, entry.key)
+        card.connect('app_forget', self.forget_app, entry.app_type, entry.key)
+        self.content.add_app_card(card)
+        self._sync_app_meters(entry)
 
-        self.load_app_combobox()
+    def app_entry_change(self, entry):
+        card = self.content.app_cards.get((entry.app_type, entry.key))
+        if card is None:
+            self.app_entry_new(entry)
+            return
 
-        for app_type in ('sink_input', 'source_output'):
-            for app_index, app_model in self.list_apps(app_type).items():
-                self.create_app_widget(app_type, app_index, app_model)
+        was = card.entry.label, card.get_css_classes()
+        card.refresh()
+        if was != (card.entry.label, card.get_css_classes()):
+            self.content.refresh_apps_view()
+        self._sync_app_meters(entry)
 
-    def list_apps(self, app_type: str) -> dict[str, AppModel]:
-        '''
-        Returns a list of AppModels
-            "index" is the index of the app
-            "app_type" is either 'sink_input' or 'source_output'
-        '''
-        pa_app_list = pmctl.list_apps(app_type)
-
-        pins = pmctl.get_app_pins()
-        app_dict = {}
-        for app in pa_app_list:
-            app = AppModel.pa_to_app_model(app, app_type)
-            self._mark_app_pinned(app, pins)
-            app_dict[app.index] = app
-
-        return app_dict
-
-    @staticmethod
-    def _mark_app_pinned(app_model, pins=None):
-        '''
-        Set app_model.pinned: the "default" metadata decides if it has an entry
-        for the app, else whether the app named a device itself. pins None means
-        pw-dump is unavailable, so treat the app as pinned and let the selector
-        show its resolved device.
-        '''
-        if pins is None:
-            pins = pmctl.get_app_pins()
-        app_model.pinned = pins is None or pins.get(app_model.object_id, app_model.has_target)
-        return app_model
+    def app_entry_remove(self, app_type, key):
+        self._stop_app_meters(app_type, key)
+        self.content.remove_app_card(app_type, key)
 
     def load_app_combobox(self):
-        self.block_app_combobox_handlers(True)
+        '''
+        (Re)fill what a program can be routed to, and have every program's selector show its
+        device in the new list.
+        '''
+        for card in self.content.app_cards.values():
+            card.combobox.handler_block(card.device_handler)
+
         sink_input_device_list = [(_('Default'), '')]
         source_output_device_list = [(_('Default'), '')]
 
@@ -265,95 +349,99 @@ class GtkController(SignalModel):
 
         AppDropDown.set_device_list('sink_input', sink_input_device_list)
         AppDropDown.set_device_list('source_output', source_output_device_list)
-        self.block_app_combobox_handlers(False)
 
-    def append_app_combobox(self, device):
-        self.block_app_combobox_handlers(True)
-        if device.device_type == 'sink':
-            AppDropDown.append_device_list('sink_input', (device.nick, device.name))
-            # only vi exposes a monitor to record from
-            if device.device_class == 'virtual':
-                AppDropDown.append_device_list('source_output', (device.nick, device.name + '.monitor'))
-        else:
-            AppDropDown.append_device_list('source_output', (device.nick, device.name))
-        self.block_app_combobox_handlers(False)
+        for card in self.content.app_cards.values():
+            card.sync_device()
+            card.combobox.handler_unblock(card.device_handler)
 
-    def pop_app_combobox(self, device):
-        self.block_app_combobox_handlers(True)
-        if device.device_type == 'sink':
-            AppDropDown.remove_device_list('sink_input', (device.nick, device.name))
-            if device.device_class == 'virtual':
-                AppDropDown.remove_device_list('source_output', (device.nick, device.name + '.monitor'))
-        else:
-            AppDropDown.remove_device_list('source_output', (device.nick, device.name))
-        self.block_app_combobox_handlers(False)
+    def forget_app(self, _, app_type, key):
+        self.emit('app_forget', app_type, key)
 
-    def block_app_combobox_handlers(self, state):
-        for app_type in ('sink_input', 'source_output'):
-            for app_index, app in self.content.app_box[app_type].widgets.items():
-                handler = self.app_handlers[app_type][app_index]['app_device']
-                if state:
-                    app.handler_block(handler)
-                else:
-                    app.handler_unblock(handler)
+    def on_app_picked(self, _, key, label, binary):
+        self.emit('app_add', 'sink_input', key, label, None, binary or None)
+
+    def on_apps_view_changed(self, _):
+        self.config_model.apps_filter = self.content.apps_filter
+        self.config_model.show_offline_apps = self.content.show_offline
+
+    #
+    # # Settings
+    #
+    def _fill_settings(self):
+        self.content.settings_box.fill_settings(self.config_model, autostart.is_enabled(), autostart.starts_hidden())
 
     def settings_menu_open(self, _):
-        self.content.settings_box.fill_settings(self.config_model)
+        self._fill_settings()
 
     def settings_menu_apply(self, _, config_schema):
         vumeters_changed = self.config_model.vumeters != config_schema['vumeters']
         self.config_model.vumeters = config_schema['vumeters']
         self.config_model.cleanup = config_schema['cleanup']
-        layout_changed = self.config_model.layout != config_schema['layout']
-        self.config_model.layout = config_schema['layout']
-        if layout_changed:
-            self.rebuild_content()
-        elif vumeters_changed:
+        self.config_model.background = config_schema['background']
+        autostart.set_enabled(config_schema['autostart'], config_schema['start_hidden'])
+        if vumeters_changed:
             if self.config_model.vumeters:
                 self.start_all_vumeters()
             else:
                 self.stop_all_vumeters()
 
-    def stop_all_vumeters(self):
-        for device_type in ('a', 'b', 'vi', 'hi'):
-            for device_id in list(self.vumeter_tasks[device_type]):
-                self.stop_vumeter(device_type, device_id)
-        for app_type in ('sink_input', 'source_output'):
-            for app_index in list(self.vumeter_tasks[app_type]):
-                self.stop_vumeter(app_type, app_index)
+    def quit_pressed(self, _):
+        self.emit('quit')
 
-    def start_all_vumeters(self):
-        for device_type in ('a', 'b', 'vi', 'hi'):
-            for device_id in list(self.content.device_box[device_type].widgets):
-                self._start_device_vumeter(device_type, device_id)
-        for app_type in ('sink_input', 'source_output'):
-            for app_index in list(self.content.app_box[app_type].widgets):
-                self._start_app_vumeter(app_type, app_index)
+    #
+    # # EQ
+    #
+    def open_eq_window(self, _, device_type, device_id):
+        window = self.eq_windows.get((device_type, device_id))
+        if window is None:
+            device_model = self.device_repository.get_device(device_type, device_id)
+            window = EqWindow(device_model, transient_for=self.window)
+            window.set_hide_on_close(True)
+            window.connect('changed', self._on_eq_window_changed, device_type, device_id)
+            self.eq_windows[(device_type, device_id)] = window
+        window.present()
 
-    def rebuild_content(self):
-        self.stop_all_vumeters()
+    def toggle_eq(self, _, device_type, device_id):
+        device_model = self.device_repository.get_device(device_type, device_id)
+        device_model.eq.enabled = not device_model.eq.enabled
+        window = self.eq_windows.get((device_type, device_id))
+        if window is not None:
+            window.refresh()
+        self._on_eq_window_changed(None, device_type, device_id)
 
-        # Clear handler references (old widgets being destroyed)
-        for device_type in ('a', 'b', 'vi', 'hi'):
-            self.device_handlers[device_type].clear()
-        for app_type in ('sink_input', 'source_output'):
-            self.app_handlers[app_type].clear()
+    def _on_eq_window_changed(self, _, device_type, device_id):
+        widget = self.content.device_box[device_type].widgets.get(device_id)
+        if widget is not None:
+            widget.update_eq_state()
 
-        # Build new content with the new layout and swap it in
-        self.create_content(self.config_model.layout)
-        self.window.set_child(self.content)
+        # A drag changes the EQ on every pointer event, that many updates would only pile up
+        key = (device_type, device_id)
+        if key not in self.eq_apply_sources:
+            self.eq_apply_sources[key] = GLib.timeout_add(EQ_APPLY_DELAY_MS, self._apply_eq, device_type, device_id)
 
-        # Repopulate all device and app widgets
-        self.load_device_list()
-        self.load_app_list()
+    def _apply_eq(self, device_type, device_id):
+        self.eq_apply_sources.pop((device_type, device_id), None)
+        try:
+            self.emit('eq_change', device_type, device_id)
+        except Exception:
+            LOG.exception('Failed to apply the EQ of %s/%s', device_type, device_id)
+        return GLib.SOURCE_REMOVE
 
+    def _close_eq_window(self, device_type, device_id):
+        window = self.eq_windows.pop((device_type, device_id), None)
+        if window is not None:
+            window.destroy()
+
+    #
+    # # Signal wiring
+    #
     def connect_window_gtk_events(self):
         '''
         Connect window events to the model
         '''
 
         signal_map = {
-            'close-request': self.on_window_destroy
+            'close-request': self.on_close_request
         }
 
         for signal_name, callback in signal_map.items():
@@ -377,6 +465,8 @@ class GtkController(SignalModel):
             'destroy': self.on_device_widget_destroy,
             'settings_pressed': self.add_device_hijack,
             'connection_settings_pressed': self.connection_settings_hijack,
+            'eq_pressed': self.open_eq_window,
+            'eq_toggled': self.toggle_eq,
         }
 
         device_handler = self.device_handlers[device_type][device_id] = {}
@@ -394,6 +484,9 @@ class GtkController(SignalModel):
             'settings_pressed': self.settings_menu_open,
             'settings_change': self.settings_menu_apply,
             'help_pressed': self.open_welcome_window,
+            'quit_pressed': self.quit_pressed,
+            'app_picked': self.on_app_picked,
+            'apps_view_changed': self.on_apps_view_changed,
         }
 
         for signal_name, callback in signal_map.items():
@@ -405,27 +498,6 @@ class GtkController(SignalModel):
         '''
         self.welcome_window = WelcomeWindow(transient_for=self.window)
         self.welcome_window.present()
-
-    def connect_app_gtk_events(self, app_type: str, app_index: str, app: AppWidget):
-        '''
-        Connect a device widget events to the model
-        '''
-
-        signal_map = {
-            'app_volume': self.set_app_volume,
-            'app_mute': self.set_app_mute,
-            'app_device': self.set_app_device,
-            'destroy': self.on_app_widget_destroy
-        }
-
-        # connect gtk signals to callbacks
-        app_handler = self.app_handlers[app_type][app_index] = {}
-        for signal_name, callback in signal_map.items():
-            app_handler[signal_name] = app.connect(signal_name, callback, app_type, app_index)
-
-        self._start_app_vumeter(app_type, app_index)
-
-        return app
 
     def connection_settings_hijack(self, device_widget, output_type, output_id, input_type, input_id):
         '''
@@ -481,12 +553,18 @@ class GtkController(SignalModel):
             device_list.append(device_model)
         return device_list
 
+    #
+    # # VU meters
+    #
     def handle_vumeter_error(self, fut):
         try:
             fut.result()
 
         except CancelledError:
             LOG.debug("VUmeter task canceled")
+
+        except (pulsectl.PulseError, pulsectl.PulseDisconnected) as e:
+            LOG.debug("VUmeter lost its stream: %r", e)
 
         except Exception as e:
             tb_str = ''.join(traceback.format_exception(type(e), e, e.__traceback__))
@@ -509,17 +587,32 @@ class GtkController(SignalModel):
         task = self.vumeter_tasks[type_].pop(id_, None)
         if task is not None:
             task.cancel()
-        if type_ in ('a', 'b', 'vi', 'hi'):
-            widget = self.content.device_box[type_].widgets.get(id_)
-        else:
-            widget = self.content.app_box[type_].widgets.get(id_)
+        widget = self.content.device_box[type_].widgets.get(id_)
         if widget is not None and widget.vumeter_widget is not None:
-            widget.vumeter_widget.set_fraction(0)
-            widget.vumeter_widget.set_sensitive(False)
+            widget.vumeter_widget.reset()
+
+    def stop_all_vumeters(self):
+        for device_type in ('a', 'b', 'vi', 'hi'):
+            for device_id in list(self.vumeter_tasks[device_type]):
+                self.stop_vumeter(device_type, device_id)
+        for key in list(self.app_meter_tasks):
+            self._stop_app_meters(*key)
+
+    def start_all_vumeters(self):
+        for device_type in ('a', 'b', 'vi', 'hi'):
+            for device_id in list(self.content.device_box[device_type].widgets):
+                self._start_device_vumeter(device_type, device_id)
+        for card in self.content.app_cards.values():
+            self._sync_app_meters(card.entry)
+
+    def _meters_wanted(self):
+        return self.config_model.vumeters and not self.server_lost and self.window is not None and self.window.get_visible()
 
     def _start_device_vumeter(self, device_type: str, device_id: str):
         """Subscribe a peak stream for a device widget. No-op if vumeters are off or the widget is gone."""
-        if not self.config_model.vumeters:
+        if device_id in self.vumeter_tasks[device_type]:
+            return
+        if not self.config_model.vumeters or self.server_lost or (self.window is not None and not self.window.get_visible()):
             return
         device_widget = self.content.device_box[device_type].widgets.get(device_id)
         if device_widget is None:
@@ -529,22 +622,34 @@ class GtkController(SignalModel):
             pa_device_type, device_widget.device_model.name, device_widget.vumeter_widget
         )
 
-    def _start_app_vumeter(self, app_type: str, app_index):
-        """Subscribe a peak stream for an app widget. No-op if vumeters are off or the widget is gone."""
-        if not self.config_model.vumeters:
+    def _sync_app_meters(self, entry):
+        """Have a meter running per open stream of a program, up to a few."""
+        key = (entry.app_type, entry.key)
+        card = self.content.app_cards.get(key)
+        if card is None or card.vumeter_widget is None:
             return
-        app_widget = self.content.app_box[app_type].widgets.get(app_index)
-        if app_widget is None or app_widget.vumeter_widget is None:
-            return
-        stream_type = app_type.split('_')[0]
+
+        wanted = list(entry.streams)[:MAX_METERED_STREAMS] if self._meters_wanted() else []
+        tasks = self.app_meter_tasks.setdefault(key, {})
+        for index in list(tasks):
+            if index not in wanted:
+                tasks.pop(index).cancel()
+
         # pipewire-pulse attaches the meter to the stream itself (by index),
         # so it follows the app across moves without a restart
-        name = app_widget.app_model.device
-        if not name:
-            return
-        self.vumeter_tasks[app_type][app_index] = self.start_vumeter(
-            stream_type, name, app_widget.vumeter_widget, app_index
-        )
+        for index in wanted:
+            if index not in tasks:
+                tasks[index] = self.start_vumeter('sink', entry.streams[index].device, card.vumeter_widget, index)
+
+        if not wanted:
+            card.vumeter_widget.reset()
+
+    def _stop_app_meters(self, app_type, key):
+        for task in self.app_meter_tasks.pop((app_type, key), {}).values():
+            task.cancel()
+        card = self.content.app_cards.get((app_type, key))
+        if card is not None and card.vumeter_widget is not None:
+            card.vumeter_widget.reset()
 
     def _restart_device_vumeter(self, device_type: str, device_id: str):
         """(Re)subscribe a peak stream for a device that just appeared in PA."""
@@ -580,6 +685,7 @@ class GtkController(SignalModel):
         Call to device model to set model connection
         '''
         self.emit('connect', input_type, input_id, output_type, output_id, state)
+        self.refresh_output_sources()
 
     def set_route_volume(self, _, output_type, output_id, volume: int, input_type, input_id):
         '''
@@ -617,28 +723,23 @@ class GtkController(SignalModel):
         '''
         self.emit('device_change', schema, device_type, device_id)
 
-    def set_app_volume(self, _, volume: int, app_type, app_index):
+    def set_app_volume(self, _, volume: int, app_type, key):
         '''
-        Set model volume
+        Set a program's volume
         '''
-        self.emit('app_volume', app_type, app_index, volume)
+        self.emit('app_volume', app_type, key, volume)
 
-    def set_app_mute(self, _, state: bool, app_type, app_index):
+    def set_app_mute(self, _, state: bool, app_type, key):
         '''
-        Set model mute
+        Set a program's mute
         '''
-        self.emit('app_mute', app_type, app_index, state)
+        self.emit('app_mute', app_type, key, state)
 
-    def set_app_device(self, _, device_nick: str, app_type, app_index):
+    def set_app_device(self, _, device_name: str, app_type, key):
         '''
-        Set model device
+        Set a program's device
         '''
-        self.emit('app_device', app_type, app_index, device_nick)
-
-        # neomixer wrote the pin itself, so the pick is the new state
-        app_widget = self.content.app_box[app_type].widgets.get(app_index)
-        if app_widget is not None:
-            app_widget.app_model.pinned = bool(device_nick)
+        self.emit('app_device', app_type, key, device_name)
 
     #
     # # End model update functions
@@ -720,38 +821,6 @@ class GtkController(SignalModel):
             for target_id, target_device in self.content.device_box[device_type].widgets.items():
                 target_device.primary_widget.set_primary(target_id == device_id)
 
-            return False
-
-        GLib.idle_add(wrapper)
-
-    def app_new_callback(self, app_type: str, app_index: int, app_model: DeviceModel):
-        def wrapper():
-            self._mark_app_pinned(app_model)
-            self.create_app_widget(app_type, app_index, app_model)
-            return False
-
-        GLib.idle_add(wrapper)
-
-    def app_remove_callback(self, app_type: str, app_index: int):
-        def wrapper():
-            self.remove_app_widget(app_type, app_index)
-            return False
-
-        GLib.idle_add(wrapper)
-
-    def app_change_callback(self, app_type: str, app_index: int, app: DeviceModel):
-        def wrapper():
-            app_widget = self.content.app_box[app_type].widgets.get(app_index)
-            if app_widget:
-                device_changed = app_widget.app_model.device != app.device
-                # the event doesn't carry the pin, and only a move (or a pick,
-                # see set_app_device) changes it: keep the known one rather
-                # than look it up for every volume step
-                if device_changed:
-                    self._mark_app_pinned(app)
-                else:
-                    app.pinned = app_widget.app_model.pinned
-                app_widget.pa_app_change(app)
             return False
 
         GLib.idle_add(wrapper)

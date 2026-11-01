@@ -62,3 +62,4 @@ class WidgetBox(Gtk.Box):
         '''
         for widget in self.widgets.values():
             self.remove(widget)
+        self.widgets = {}

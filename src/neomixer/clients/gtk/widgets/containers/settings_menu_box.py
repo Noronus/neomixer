@@ -1,8 +1,5 @@
 import gettext
 
-from neomixer.clients.gtk.widgets.common.dropdown_widget import LabeledDropDown
-from neomixer.clients.gtk.layouts import layout_manager
-
 # pylint: disable=wrong-import-order,wrong-import-position
 import gi
 gi.require_version('Gtk', '4.0')
@@ -12,62 +9,90 @@ from gi.repository import Gtk, GObject  # noqa: E402
 _ = gettext.gettext
 
 
-class SettingsMenuBox(Gtk.Box):
+def _option(label, tooltip):
+    '''A setting's row, returns (row, switch).'''
+    row = Gtk.Box(spacing=12)
+    row.append(Gtk.Label(label=label, xalign=0, hexpand=True))
+    switch = Gtk.Switch(valign=Gtk.Align.CENTER)
+    row.append(switch)
+    row.set_tooltip_text(tooltip)
+    return row, switch
 
-    vumeters: Gtk.CheckButton
-    cleanup: bool = False
-    layout: str = 'Blocks'
+
+class SettingsMenuBox(Gtk.Box):
+    '''
+    App settings. They apply as soon as they are switched.
+    '''
 
     __gsignals__ = {
         "settings_change": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_PYOBJECT,)),
-        "help_pressed": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ())
+        "help_pressed": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
+        "quit_pressed": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
     }
 
     def __init__(self):
-        super().__init__()
-        self.vumeters = Gtk.CheckButton(label=_('Enable VU Meters'))
-        self.cleanup = Gtk.CheckButton(label=_('Enable Cleanup'))
-        self.layout = LabeledDropDown(_('Layout '))
-        self.layout.load_list(layout_manager.get_layout_list())
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=10,
+                         margin_start=8, margin_end=8, margin_top=8, margin_bottom=8)
+        self._filling = False
 
-        self.apply_button = Gtk.Button(label=_('Apply'))
-        self.help_button = Gtk.Button(icon_name='help-about-symbolic')
-        self.help_button.set_tooltip_text(_('Open the welcome guide'))
-        Gtk.Accessible.update_property(
-            self.help_button,
-            [Gtk.AccessibleProperty.LABEL],
-            [_('Open the welcome guide')]
+        autostart_row, self.autostart = _option(
+            _('Start at login'), _('Start NeoMixer with your desktop session, so routing and EQ are there right away')
         )
-        self.vumeters.set_tooltip_text(_('Enable or disable VU meters (volume peak)'))
-        self.cleanup.set_tooltip_text(_('Enable or disable cleaning up devices and connections upon closing'))
-        self.layout.set_tooltip_text(_('Select the GUI layout'))
+        hidden_row, self.start_hidden = _option(
+            _('Start hidden at login'), _('Start in the background without opening the window')
+        )
+        background_row, self.background = _option(
+            _('Keep running when closed'),
+            _('Closing the window keeps NeoMixer in the background: new app streams only go to '
+              'their remembered output while it runs')
+        )
+        vumeters_row, self.vumeters = _option(_('VU meters'), _('Enable or disable VU meters (volume peak)'))
+        cleanup_row, self.cleanup = _option(
+            _('Remove devices on quit'), _('Enable or disable cleaning up devices and connections upon closing')
+        )
 
-        button_box = Gtk.Box(vexpand=False, halign=Gtk.Align.END, valign=Gtk.Align.END, spacing=6)
+        for row in (autostart_row, hidden_row, background_row, vumeters_row, cleanup_row):
+            self.append(row)
+
+        self.switches = (self.autostart, self.start_hidden, self.background, self.vumeters, self.cleanup)
+        for switch in self.switches:
+            switch.connect('notify::active', self._on_switched)
+
+        self.help_button = Gtk.Button(label=_('Guide'))
+        self.help_button.set_tooltip_text(_('Open the welcome guide'))
+        self.quit_button = Gtk.Button(label=_('Quit NeoMixer'), hexpand=True)
+        self.quit_button.add_css_class('quit-button')
+        self.quit_button.set_tooltip_text(_('Stop running in the background. Audio keeps its routes.'))
+
+        button_box = Gtk.Box(spacing=6, margin_top=4)
         button_box.append(self.help_button)
-        button_box.append(self.apply_button)
+        button_box.append(self.quit_button)
+        self.append(button_box)
 
-        mainbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        mainbox.append(self.vumeters)
-        mainbox.append(self.cleanup)
-        mainbox.append(self.layout)
-        mainbox.append(button_box)
-
-        self.apply_button.connect('clicked', self.apply_settings)
         self.help_button.connect('clicked', lambda _: self.emit('help_pressed'))
+        self.quit_button.connect('clicked', lambda _: self.emit('quit_pressed'))
 
-        self.append(mainbox)
-
-    def fill_settings(self, config_model):
+    def fill_settings(self, config_model, autostart_enabled, start_hidden):
+        self._filling = True
         self.vumeters.set_active(config_model.vumeters)
         self.cleanup.set_active(config_model.cleanup)
-        self.layout.set_active_name(config_model.layout)
+        self.background.set_active(config_model.background)
+        self.autostart.set_active(autostart_enabled)
+        self.start_hidden.set_active(start_hidden)
+        self.start_hidden.set_sensitive(autostart_enabled)
+        self._filling = False
 
     def to_schema(self):
         return {
             'vumeters': self.vumeters.get_active(),
             'cleanup': self.cleanup.get_active(),
-            'layout': self.layout.get_active_text(),
+            'background': self.background.get_active(),
+            'autostart': self.autostart.get_active(),
+            'start_hidden': self.start_hidden.get_active(),
         }
 
-    def apply_settings(self, _):
+    def _on_switched(self, *_):
+        if self._filling:
+            return
+        self.start_hidden.set_sensitive(self.autostart.get_active())
         self.emit('settings_change', self.to_schema())

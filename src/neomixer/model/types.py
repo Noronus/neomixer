@@ -11,8 +11,14 @@ DEVICE_TYPE_PRETTY = {
     'vi': _('Virtual Inputs'),
     'a': _('Hardware Outputs'),
     'b': _('Virtual Outputs'),
-    'sink_input': _('Application Outputs'),
-    'source_output': _('Application Inputs')
+}
+
+
+DEVICE_TYPE_SHORT = {
+    'hi': _('Hardware In'),
+    'vi': _('Virtual In'),
+    'a': _('Hardware Out'),
+    'b': _('Virtual Out'),
 }
 
 

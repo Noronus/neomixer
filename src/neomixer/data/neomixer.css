@@ -1,0 +1,202 @@
+/* NeoMixer's console look. Colors are per section: inputs are cool, outputs warm. */
+
+@define-color nm_bg #0e1117;
+@define-color nm_panel #141821;
+@define-color nm_strip #1a1f2a;
+@define-color nm_strip_high #212734;
+@define-color nm_line #2a3140;
+@define-color nm_text #e6e9f0;
+@define-color nm_dim #8b93a7;
+@define-color nm_faint #5b6375;
+
+@define-color nm_hi #38bdf8;
+@define-color nm_vi #a78bfa;
+@define-color nm_a #34d399;
+@define-color nm_b #fb923c;
+@define-color nm_app #f472b6;
+@define-color nm_mute #ef4444;
+@define-color nm_eq #fbbf24;
+
+window.neomixer, window.neomixer-eq {
+    background-color: @nm_bg;
+    color: @nm_text;
+}
+
+window.neomixer headerbar, window.neomixer-eq headerbar {
+    background-image: linear-gradient(to bottom, #1a1f2b, #121620);
+    box-shadow: inset 0 -1px @nm_line;
+    border: none;
+    min-height: 38px;
+    color: @nm_text;
+}
+
+.brand-name { font-weight: 800; letter-spacing: 0.04em; }
+.brand-neo { color: @nm_vi; font-weight: 800; letter-spacing: 0.04em; }
+.server-lost { color: @nm_mute; font-weight: 700; }
+
+/* Mixer */
+.section { background-color: @nm_panel; border-radius: 10px; padding: 6px; border: 1px solid @nm_line; }
+.section-title {
+    font-size: 0.72em; font-weight: 800; letter-spacing: 0.12em; color: @nm_dim;
+}
+.section-hi .section-title { color: @nm_hi; }
+.section-vi .section-title { color: @nm_vi; }
+.section-a .section-title { color: @nm_a; }
+.section-b .section-title { color: @nm_b; }
+.section-apps .section-title { color: @nm_app; }
+
+button.icon-small {
+    min-width: 22px; min-height: 22px; padding: 0; margin: 0;
+    background: transparent; border: none; box-shadow: none; color: @nm_dim; border-radius: 6px;
+}
+button.icon-small:hover { background-color: @nm_strip_high; color: @nm_text; }
+menubutton.icon-small > button {
+    min-width: 22px; min-height: 22px; padding: 0; margin: 0;
+    background: transparent; border: none; box-shadow: none; color: @nm_dim; border-radius: 6px;
+}
+menubutton.icon-small > button:hover { background-color: @nm_strip_high; color: @nm_text; }
+menubutton.icon-small > button:checked { background-color: @nm_strip_high; color: @nm_text; }
+
+.strip {
+    background-image: linear-gradient(to bottom, @nm_strip_high, @nm_strip);
+    border-radius: 8px;
+    border: 1px solid @nm_line;
+    padding: 0 6px 6px 6px;
+}
+.strip-bar { min-height: 3px; border-radius: 0 0 3px 3px; margin: 0 8px 4px 8px; }
+.strip-hi .strip-bar { background-color: @nm_hi; }
+.strip-vi .strip-bar { background-color: @nm_vi; }
+.strip-a .strip-bar { background-color: @nm_a; }
+.strip-b .strip-bar { background-color: @nm_b; }
+
+.strip-name { font-weight: 700; }
+.strip-tag {
+    font-size: 0.72em; font-weight: 800; padding: 0 4px; border-radius: 4px; color: @nm_bg;
+}
+.strip-a .strip-tag { background-color: @nm_a; }
+.strip-b .strip-tag { background-color: @nm_b; }
+.strip-description { font-size: 0.75em; color: @nm_faint; }
+.strip-value { font-size: 0.8em; font-feature-settings: "tnum"; color: @nm_dim; font-weight: 600; }
+.strip.disconnected .strip-name, .strip.disconnected .strip-description { color: @nm_faint; }
+
+.strip-sources-title { font-size: 0.62em; font-weight: 800; letter-spacing: 0.1em; color: @nm_faint; }
+.strip-sources { font-size: 0.8em; color: @nm_dim; }
+
+/* Faders */
+scale.fader { padding: 0; margin: 0; }
+scale.fader trough {
+    background-color: #0a0d12;
+    border: 1px solid #000;
+    box-shadow: 0 1px rgba(255,255,255,0.05);
+    border-radius: 3px;
+    min-width: 6px; min-height: 6px;
+}
+scale.fader.vertical { min-width: 34px; }
+scale.fader highlight { border-radius: 3px; border: none; min-width: 6px; min-height: 6px; }
+.strip-hi scale.fader highlight { background-image: none; background-color: @nm_hi; }
+.strip-vi scale.fader highlight { background-image: none; background-color: @nm_vi; }
+.strip-a scale.fader highlight { background-image: none; background-color: @nm_a; }
+.strip-b scale.fader highlight { background-image: none; background-color: @nm_b; }
+.app-card scale.fader highlight { background-image: none; background-color: @nm_app; }
+window.neomixer-eq scale.fader highlight { background-image: none; background-color: @nm_eq; }
+scale.fader slider {
+    background-image: linear-gradient(to bottom, #f4f6fa, #aab2c2);
+    border: 1px solid #05070a;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    border-radius: 3px;
+    outline: none;
+    transition: none;
+}
+scale.fader.vertical slider { min-width: 30px; min-height: 14px; margin: -7px -14px; }
+scale.fader.horizontal slider { min-width: 12px; min-height: 16px; margin: -7px -6px; border-radius: 3px; }
+scale.fader slider:hover { background-image: linear-gradient(to bottom, #ffffff, #c7cede); }
+scale.fader marks indicator { background-color: @nm_faint; min-width: 1px; min-height: 1px; }
+scale.fader.vertical marks indicator { min-width: 5px; min-height: 1px; }
+
+/* Strip buttons */
+button.strip-button, menubutton.strip-button > button {
+    min-height: 22px; min-width: 0; padding: 0 4px; margin: 0;
+    background-image: none; background-color: #0f1319;
+    border: 1px solid @nm_line; border-radius: 5px; box-shadow: none;
+    color: @nm_dim; font-size: 0.78em; font-weight: 800;
+}
+button.strip-button:hover { background-color: #1a202b; color: @nm_text; }
+button.mute:checked { background-color: @nm_mute; border-color: @nm_mute; color: #fff; }
+button.primary:checked { background-color: @nm_text; border-color: @nm_text; color: @nm_bg; }
+button.eq-button.eq-on { background-color: @nm_eq; border-color: @nm_eq; color: #1a1305; }
+button.eq-button.eq-on:hover { background-color: #fcd34d; color: #1a1305; }
+button.eq-button.eq-curved { color: @nm_eq; border-color: @nm_eq; }
+
+/* Routes */
+button.route {
+    min-height: 22px; padding: 0 6px; margin: 0;
+    background-image: none; background-color: #0f1319;
+    border: 1px solid @nm_line; border-radius: 5px; box-shadow: none;
+    color: @nm_dim; font-size: 0.8em;
+}
+button.route:hover { background-color: #1a202b; color: @nm_text; }
+button.route .route-tag { font-weight: 800; font-size: 0.92em; }
+button.route-a .route-tag { color: @nm_a; }
+button.route-b .route-tag { color: @nm_b; }
+button.route-a:checked { background-color: @nm_a; border-color: @nm_a; color: #06281d; }
+button.route-b:checked { background-color: @nm_b; border-color: @nm_b; color: #2b1505; }
+button.route-a:checked .route-tag, button.route-b:checked .route-tag { color: inherit; }
+
+/* Apps */
+.app-card {
+    background-image: linear-gradient(to bottom, @nm_strip_high, @nm_strip);
+    border: 1px solid @nm_line;
+    border-radius: 8px;
+    padding: 6px 8px;
+}
+.app-card.app-active { border-color: alpha(@nm_app, 0.65); }
+.app-card.app-offline { background-image: none; background-color: #151922; }
+.app-card.app-offline .app-icon { opacity: 0.45; }
+.app-card.app-offline .app-name { color: @nm_dim; }
+.app-card.app-offline scale.fader highlight { background-color: @nm_faint; }
+.app-name { font-weight: 700; }
+.app-status { font-size: 0.72em; color: @nm_faint; }
+.app-dot { min-width: 8px; min-height: 8px; border-radius: 50%; background-color: @nm_faint; }
+.app-active .app-dot { background-color: @nm_a; box-shadow: 0 0 5px @nm_a; }
+.app-idle .app-dot { background-color: @nm_eq; }
+.app-offline .app-dot { background-color: #3a4152; }
+.app-value { font-size: 0.75em; font-feature-settings: "tnum"; color: @nm_dim; min-width: 24px; }
+.app-kind { font-size: 0.68em; font-weight: 800; color: @nm_faint; }
+.app-card dropdown > button {
+    min-height: 22px; padding: 0 4px; font-size: 0.82em;
+    background-image: none; background-color: #0f1319; border: 1px solid @nm_line; box-shadow: none;
+    border-radius: 5px; color: @nm_text;
+}
+.app-card dropdown > button:hover { background-color: #1a202b; }
+.app-card.app-routed dropdown > button { border-color: alpha(@nm_vi, 0.7); }
+flowboxchild { padding: 0; background: transparent; outline: none; }
+
+.filter-toggle > button, button.filter-toggle {
+    min-height: 20px; min-width: 0; padding: 0 8px; font-size: 0.75em; font-weight: 700;
+    background-image: none; background-color: #0f1319; color: @nm_dim;
+    border: 1px solid @nm_line; box-shadow: none;
+}
+button.filter-toggle:checked { background-color: @nm_app; border-color: @nm_app; color: #2a0b1b; }
+.apps-count { font-size: 0.75em; color: @nm_faint; }
+.empty-hint { color: @nm_faint; font-size: 0.85em; }
+
+button.quit-button { background-image: none; background-color: alpha(@nm_mute, 0.15); border: 1px solid alpha(@nm_mute, 0.6); color: #fca5a5; }
+button.quit-button:hover { background-color: alpha(@nm_mute, 0.3); }
+
+paned.mixer-split > separator {
+    min-height: 6px; background: transparent; background-image: none; margin: 0;
+}
+
+/* EQ window */
+.eq-toolbar { padding: 8px 10px; background-color: @nm_panel; border-bottom: 1px solid @nm_line; }
+.eq-label { color: @nm_dim; font-size: 0.82em; }
+.eq-value { font-feature-settings: "tnum"; font-size: 0.85em; color: @nm_text; min-width: 56px; }
+.eq-bands { padding: 8px 10px 4px 10px; background-color: @nm_panel; }
+.eq-detail { padding: 6px 10px 10px 10px; background-color: @nm_panel; }
+button.eq-chip {
+    min-height: 26px; padding: 0 6px; font-size: 0.8em; font-weight: 700; border-radius: 6px;
+    background-image: none; background-color: #0f1319; border: 1px solid @nm_line; box-shadow: none; color: @nm_dim;
+}
+button.eq-chip:checked { background-color: @nm_strip_high; color: @nm_text; border-color: @nm_eq; }
+button.eq-chip.eq-chip-off { color: @nm_faint; }
+.eq-window-off .eq-chip { opacity: 0.7; }

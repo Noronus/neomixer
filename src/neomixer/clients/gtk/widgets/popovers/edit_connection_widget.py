@@ -35,6 +35,8 @@ class ConnectionSettingsPopup(Gtk.Popover):
 
     __gsignals__ = {
         'settings_changed': (GObject.SignalFlags.RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_PYOBJECT,)),
+        'use_loopback': (GObject.SignalFlags.RUN_FIRST, GObject.TYPE_NONE, (bool,)),
+        'route_volume': (GObject.SignalFlags.RUN_FIRST, GObject.TYPE_NONE, (int,)),
     }
 
     def __init__(self, connection_model: ConnectionModel = None):
@@ -56,6 +58,21 @@ class ConnectionSettingsPopup(Gtk.Popover):
         self.status_box.append(self.status_icon)
         self.status_box.append(self.status_label)
 
+        # A route has its own volume through a loopback, which is opt-in
+        self.loopback_check = Gtk.CheckButton(label=_('Own volume for this route'), active=connection_model.use_loopback)
+        self.loopback_check.set_tooltip_text(_('Enable per-route volume (uses pw-loopback)'))
+        self.route_volume_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL, hexpand=True, draw_value=True)
+        self.route_volume_scale.set_range(0, 153)
+        self.route_volume_scale.set_increments(1, 5)
+        self.route_volume_scale.set_digits(0)
+        self.route_volume_scale.set_value(connection_model.route_volume)
+        self.route_volume_scale.add_mark(100, Gtk.PositionType.TOP, None)
+        self.route_volume_scale.set_size_request(160, -1)
+        self.route_volume_scale.set_tooltip_text(_('Route volume'))
+        self.route_volume_scale.set_visible(connection_model.use_loopback)
+        self.loopback_check.connect('toggled', self._on_loopback_toggled)
+        self.route_volume_scale.connect('value-changed', self._on_route_volume_changed)
+
         # connect events
         self._auto_handler_id = self.auto_ports_check.connect('toggled', self._on_auto_toggled)
         self.port_map_widget.connect('changed', self._on_port_map_changed)
@@ -65,8 +82,18 @@ class ConnectionSettingsPopup(Gtk.Popover):
         main_box.append(Gtk.Separator())
         main_box.append(self.port_map_widget)
         main_box.append(self.status_box)
+        main_box.append(Gtk.Separator(margin_top=4, margin_bottom=2))
+        main_box.append(self.loopback_check)
+        main_box.append(self.route_volume_scale)
 
         self.set_child(main_box)
+
+    def _on_loopback_toggled(self, widget):
+        self.route_volume_scale.set_visible(widget.get_active())
+        self.emit('use_loopback', widget.get_active())
+
+    def _on_route_volume_changed(self, widget):
+        self.emit('route_volume', int(widget.get_value()))
 
     def fill_settings(self):
         # showing the saved setting is not a change made by the user

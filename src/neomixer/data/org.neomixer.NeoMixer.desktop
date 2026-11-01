@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=NeoMixer
+GenericName=Audio Mixer
+Comment=Virtual audio mixer for PipeWire, with per-input EQ and remembered app routing
+Exec=@EXEC@
+Icon=org.neomixer.NeoMixer
+Terminal=false
+Categories=AudioVideo;Audio;Mixer;
+Keywords=audio;mixer;pipewire;equalizer;routing;voicemeeter;
+StartupNotify=true
+StartupWMClass=org.neomixer.NeoMixer

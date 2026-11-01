@@ -3,7 +3,7 @@ import gettext
 # pylint: disable=wrong-import-order,wrong-import-position
 import gi
 gi.require_version('Gtk', '4.0')
-from gi.repository import Gtk, Gio, GObject  # noqa: E402
+from gi.repository import Gtk, GObject  # noqa: E402
 # pylint: enable=wrong-import-order,wrong-import-position
 
 _ = gettext.gettext
@@ -16,16 +16,15 @@ class DefaultWidget(Gtk.ToggleButton):
     }
 
     def __init__(self, active: bool, *args, **kwargs):
-        icon = Gio.ThemedIcon(name='emblem-default-symbolic')
-        image = Gtk.Image.new_from_gicon(icon)
-        super().__init__(active=active, *args, **kwargs)
-
-        self.set_child(image)
+        super().__init__(active=active, label='★', *args, **kwargs)
+        self.add_css_class('strip-button')
+        self.add_css_class('primary')
         self._signal_handler_id = self.connect('toggled', self._on_toggled)
         Gtk.Accessible.update_property(self, [Gtk.AccessibleProperty.LABEL], [_('Primary')])
         self._update_tooltip(active)
 
     def _on_toggled(self, widget):
+        self._update_tooltip(widget.get_active())
         if widget.get_active():
             self.emit('primary')
 
@@ -38,7 +37,8 @@ class DefaultWidget(Gtk.ToggleButton):
     def set_primary(self, state):
         self.handler_block(self._signal_handler_id)
         self.set_active(state)
+        self._update_tooltip(state)
         self.handler_unblock(self._signal_handler_id)
 
     def get_primary(self):
-        self.get_active()
+        return self.get_active()

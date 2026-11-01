@@ -5,13 +5,17 @@ from neomixer.clients.gtk.widgets.popovers.edit_connection_widget import Connect
 # pylint: disable=wrong-import-order,wrong-import-position
 import gi
 gi.require_version('Gtk', '4.0')
-from gi.repository import Gtk, GObject  # noqa: E402
+from gi.repository import Gtk, GObject, Pango  # noqa: E402
 # pylint: enable=wrong-import-order,wrong-import-position
 
 _ = gettext.gettext
 
 
 class ConnectionWidget(Gtk.Box):
+    '''
+    A route button, named after the output it plays into. Right click opens the route's
+    settings, which is also where its volume is.
+    '''
 
     __gsignals__ = {
         'connection': (GObject.SignalFlags.RUN_FIRST, GObject.TYPE_NONE, (bool,)),
@@ -20,25 +24,30 @@ class ConnectionWidget(Gtk.Box):
         'settings_pressed': (GObject.SignalFlags.RUN_FIRST, GObject.TYPE_NONE, ()),
     }
 
-    def __init__(self, label: str, connection_model, *args, **kwargs):
-        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=4, *args, **kwargs)
+    def __init__(self, label: str, connection_model, tag: str = '', output_type: str = 'a', **kwargs):
+        super().__init__(orientation=Gtk.Orientation.HORIZONTAL, **kwargs)
         self.set_hexpand(True)
         self.connection_model = connection_model
 
         # Warning icon shown when route fails to set up
-        self.warning_icon = Gtk.Image.new_from_icon_name('dialog-warning')
+        self.warning_icon = Gtk.Image.new_from_icon_name('dialog-warning-symbolic')
 
         # Info icon shown when automatic mapping paired channels by order
-        self.info_icon = Gtk.Image.new_from_icon_name('dialog-information')
+        self.info_icon = Gtk.Image.new_from_icon_name('dialog-information-symbolic')
 
-        # Toggle button with [warning_icon | info_icon | label] as its content
-        toggle_content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4, halign=Gtk.Align.CENTER)
+        tag_label = Gtk.Label(label=tag)
+        tag_label.add_css_class('route-tag')
+        name_label = Gtk.Label(label=label, ellipsize=Pango.EllipsizeMode.END, hexpand=True, xalign=0, max_width_chars=8)
+
+        toggle_content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
+        toggle_content.append(tag_label)
         toggle_content.append(self.warning_icon)
         toggle_content.append(self.info_icon)
-        toggle_content.append(Gtk.Label(label=label))
-        self.toggle_button = Gtk.ToggleButton(active=connection_model.state)
+        toggle_content.append(name_label)
+        self.toggle_button = Gtk.ToggleButton(active=connection_model.state, hexpand=True)
         self.toggle_button.set_child(toggle_content)
-        self.toggle_button.set_size_request(120, -1)
+        self.toggle_button.add_css_class('route')
+        self.toggle_button.add_css_class(f'route-{output_type}')
         self._toggle_handler_id = self.toggle_button.connect('toggled', self._on_toggled)
 
         # Right-click gesture for connection settings popup
@@ -49,47 +58,22 @@ class ConnectionWidget(Gtk.Box):
         self.popover.set_parent(self.toggle_button)
         self.toggle_button.add_controller(gesture)
 
-        # Checkbox for use_loopback opt-in
-        self.loopback_check = Gtk.CheckButton(active=connection_model.use_loopback)
-        self.loopback_check.set_tooltip_text(_('Enable per-route volume (uses pw-loopback)'))
-        self._loopback_handler_id = self.loopback_check.connect('toggled', self._on_loopback_toggled)
+        self.popover.connect('use_loopback', self._on_loopback_toggled)
+        self.popover.connect('route_volume', self._on_volume_changed)
 
-        # Volume slider for route volume
-        self.volume_scale = Gtk.Scale(orientation=Gtk.Orientation.HORIZONTAL)
-        self.volume_scale.set_range(0, 153)
-        self.volume_scale.set_increments(1, 5)
-        self.volume_scale.set_digits(0)
-        self.volume_scale.set_value(connection_model.route_volume)
-        self.volume_scale.set_hexpand(True)
-        self.volume_scale.set_size_request(150, -1)
-        self.volume_scale.add_mark(100, Gtk.PositionType.TOP, '')
-        self.volume_scale.set_tooltip_text(_('Route volume'))
-        self._volume_handler_id = self.volume_scale.connect('value-changed', self._on_volume_changed)
-
-        # Pack widgets
         self.append(self.toggle_button)
-        self.append(self.loopback_check)
-        self.append(self.volume_scale)
 
-        # Initial visibility. set_accessible() must run before update_warning()
-        # because it sets a default tooltip on the toggle button - update_warning
-        # then overrides that tooltip with the error message when failed.
-        self._update_visibility()
+        # set_accessible() must run before update_warning() because it sets a default
+        # tooltip on the toggle button - update_warning then overrides that tooltip with
+        # the error message when failed.
         self.set_accessible()
         self.update_warning()
 
     def set_accessible(self):
-        description_label = _('Connect to %s, right click to open connection settings') % self.connection_model.nick
+        description_label = _('Route to %s. Right click for its settings and volume.') % self.connection_model.nick
         self.toggle_button.set_tooltip_text(description_label)
         Gtk.Accessible.update_property(self.toggle_button, [Gtk.AccessibleProperty.DESCRIPTION], [description_label])
         Gtk.Accessible.update_property(self.toggle_button, [Gtk.AccessibleProperty.HAS_POPUP], [True])
-
-    def _update_visibility(self):
-        '''Update visibility of checkbox and slider based on connection state and loopback flag.'''
-        is_connected = self.toggle_button.get_active()
-        use_loopback = self.loopback_check.get_active()
-        self.loopback_check.set_visible(is_connected)
-        self.volume_scale.set_visible(is_connected and use_loopback)
 
     def update_warning(self):
         """
@@ -103,20 +87,18 @@ class ConnectionWidget(Gtk.Box):
         if problem or order:
             self.toggle_button.set_tooltip_text(problem or order)
         else:
-            self.set_accessible() # Restores normal tooltip
+            self.set_accessible()  # Restores normal tooltip
 
     def _on_toggled(self, widget):
-        self._update_visibility()
         self.emit('connection', widget.get_active())
         self.update_warning()
 
-    def _on_loopback_toggled(self, widget):
-        self._update_visibility()
-        self.emit('use_loopback', widget.get_active())
+    def _on_loopback_toggled(self, _popover, state):
+        self.emit('use_loopback', state)
         self.update_warning()
 
-    def _on_volume_changed(self, widget):
-        self.emit('route_volume', int(widget.get_value()))
+    def _on_volume_changed(self, _popover, value):
+        self.emit('route_volume', value)
 
     def _on_pressed(self, _, __, ___, ____):
         self.popover.popup()
@@ -125,16 +107,4 @@ class ConnectionWidget(Gtk.Box):
     def set_connection(self, state):
         self.toggle_button.handler_block(self._toggle_handler_id)
         self.toggle_button.set_active(state)
-        self._update_visibility()
         self.toggle_button.handler_unblock(self._toggle_handler_id)
-
-    def set_route_volume(self, value):
-        self.volume_scale.handler_block(self._volume_handler_id)
-        self.volume_scale.set_value(value)
-        self.volume_scale.handler_unblock(self._volume_handler_id)
-
-    def set_use_loopback(self, state):
-        self.loopback_check.handler_block(self._loopback_handler_id)
-        self.loopback_check.set_active(state)
-        self._update_visibility()
-        self.loopback_check.handler_unblock(self._loopback_handler_id)

@@ -62,6 +62,9 @@ class AppDropDown(Gtk.DropDown):
 
         self.set_selected(0)
 
+    def has_device(self, device):
+        return any(entry[1] == device for entry in self._device_data[self.app_type])
+
     @classmethod
     def set_device_list(cls, app_type, device_list):
         # entry = (label shown to user, pa_name to route/match on)

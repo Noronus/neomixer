@@ -62,7 +62,10 @@ def parse_bool(value):
 def parse_args():
     LOG.debug('Parsing args...')
     parser = argparse.ArgumentParser(description='NeoMixer')
+    parser.add_argument('--hidden', action='store_true', help='Start in the background, without opening the window')
     subparser = parser.add_subparsers(dest='command')
+
+    subparser.add_parser('quit', help='Quit the running instance')
 
     subparser.add_parser('init', help='INIT')
 

@@ -1,3 +1,4 @@
+import math
 import gettext
 
 # pylint: disable=wrong-import-order,wrong-import-position
@@ -27,7 +28,9 @@ class VolumeWidget(Gtk.Scale):
         self.set_increments(1, 5)
         self.set_digits(0)
         self.set_value(value)
-        self.add_mark(100, Gtk.PositionType.TOP, '')
+        self.set_draw_value(False)
+        self.add_css_class('fader')
+        self.add_mark(100, Gtk.PositionType.TOP, None)
 
         Gtk.Accessible.update_property(
             self,
@@ -103,3 +106,19 @@ class VolumeWidget(Gtk.Scale):
 
     def get_volume(self):
         return self.get_value()
+
+
+def volume_to_db(volume: float) -> float:
+    '''
+    The dB a volume percentage stands for, pulse volumes are cubic. None for silence.
+    '''
+    if volume <= 0:
+        return None
+    return 60 * math.log10(volume / 100)
+
+
+def format_db(volume: float) -> str:
+    db = volume_to_db(volume)
+    if db is None:
+        return '-∞ dB'
+    return f'{db:+.1f} dB' if abs(db) >= 0.05 else '0.0 dB'
