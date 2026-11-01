@@ -62,6 +62,10 @@ CONF
     mkdir -p "$SB/config/pipewire/pipewire.conf.d"
     echo 'context.spa-libs = { audiotestsrc = audiotestsrc/libspa-audiotestsrc }' \
         >"$SB/config/pipewire/pipewire.conf.d/90-sandbox.conf"
+    # A theme as far from NeoMixer's look as it gets: none of it may show
+    mkdir -p "$SB/data/themes/Hostile/gtk-4.0" "$SB/config/gtk-4.0"
+    echo '* { color: #000000; background-color: #ffffff; }' >"$SB/data/themes/Hostile/gtk-4.0/gtk.css"
+    printf '[Settings]\ngtk-theme-name=Hostile\n' >"$SB/config/gtk-4.0/settings.ini"
     # A bus without service directories: it must not activate the desktop's own services. Its
     # xdg-document-portal would take over /run/user/$UID/doc, and once it exits Flatpak apps
     # can no longer start until the real portal is restarted.

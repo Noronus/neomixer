@@ -492,6 +492,65 @@ def close_keeps_running(d):
     d.check(window.get_visible() is True, 'and show it')
 
 
+def _unreadable(root):
+    '''
+    Every label too dark for the dark look. Light widgets, like a checked button or a colored tag,
+    have dark text on purpose.
+    '''
+    from gi.repository import Gtk
+
+    found = []
+
+    def luminance(color):
+        return 0.2126 * color.red + 0.7152 * color.green + 0.0722 * color.blue
+
+    def walk(widget, light_parent=False):
+        light_parent = (light_parent or bool(widget.get_state_flags() & Gtk.StateFlags.CHECKED)
+                        or any(name in widget.get_css_classes() for name in ('strip-tag', 'eq-on')))
+        if isinstance(widget, Gtk.Label) and widget.get_mapped() and widget.get_label() and not light_parent:
+            if luminance(widget.get_color()) < 0.25:
+                found.append(widget.get_label())
+        child = widget.get_first_child()
+        while child is not None:
+            walk(child, light_parent)
+            child = child.get_next_sibling()
+
+    walk(root)
+    return found
+
+
+def readable_on_any_theme(d):
+    '''The sandbox's desktop has a theme of black text on white: none of that may show.'''
+    from gi.repository import Gtk
+
+    settings = Gtk.Settings.get_default()
+    d.check(settings.get_property('gtk-theme-name') == 'Default', f'its own theme: {settings.get_property("gtk-theme-name")}')
+    yield 0.3
+    d.check(not _unreadable(d.app.window), f'all text in the window is readable: {_unreadable(d.app.window)[:6]}')
+
+    d.ui.settings_menu_open(None)
+    popover = d.content.settings_button.get_popover()
+    popover.popup()
+    yield 0.3
+    d.check(not _unreadable(popover), f'in the settings too: {_unreadable(popover)[:6]}')
+    d.shot('theme_settings', popover)
+    popover.popdown()
+
+    d.ui.open_eq_window(None, 'vi', '1')
+    yield 0.5
+    window = d.ui.eq_windows[('vi', '1')]
+    d.check(not _unreadable(window), f'in the EQ too: {_unreadable(window)[:6]}')
+    d.shot('theme_eq', window)
+    window.close()
+
+    d.ui.open_welcome_window()
+    yield 0.5
+    d.check(not _unreadable(d.ui.welcome_window), f'in the welcome window too: {_unreadable(d.ui.welcome_window)[:6]}')
+    d.shot('theme_welcome', d.ui.welcome_window)
+    d.ui.welcome_window.close()
+    d.shot('theme_main')
+
+
 def _default(kind):
     import subprocess
     return subprocess.check_output(['pactl', f'get-default-{kind}'], text=True).strip()

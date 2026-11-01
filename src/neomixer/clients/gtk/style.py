@@ -21,8 +21,13 @@ def load():
     provider.load_from_path(os.path.join(DATA_DIR, 'neomixer.css'))
     Gtk.StyleContext.add_provider_for_display(display, provider, STYLE_PRIORITY)
 
-    # The newer property replaces the older one, which complains since GTK 4.20
+    # The look is the same on every desktop. The style sheet builds on GTK's own theme: another one
+    # brings its colors along for what is not styled here, like dark text from a light KDE theme,
+    # where asking for dark does not help unless the theme has a variant for it.
     settings = Gtk.Settings.get_for_display(display)
+    settings.set_property('gtk-theme-name', 'Default')
+
+    # The newer property replaces the older one, which complains since GTK 4.20
     if settings.find_property('gtk-interface-color-scheme') is not None:
         settings.set_property('gtk-interface-color-scheme', Gtk.InterfaceColorScheme.DARK)
     else:

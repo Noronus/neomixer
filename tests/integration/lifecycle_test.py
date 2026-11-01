@@ -89,6 +89,7 @@ SCENARIOS = (
     ('saved_by_sigterm', 0),
     ('server_restart', 0),
     ('close_keeps_running', 0),
+    ('readable_on_any_theme', 0),
     ('default_is_held', 0),
     ('hold_then_killed_and_default_taken', -signal.SIGKILL),
     ('hold_wins_at_start', 0),
