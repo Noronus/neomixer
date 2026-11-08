@@ -61,7 +61,14 @@ class RegistryTestCase(unittest.TestCase):
         self.registry.connect('entry_remove', lambda _type, key: self.events.append(('remove', key)))
 
     def _new_registry(self):
-        return AppRegistry(DeviceRepository(_FakePersistence(self.config)), clock=lambda: self.now)
+        self.scheduled = []
+        return AppRegistry(DeviceRepository(_FakePersistence(self.config)), clock=lambda: self.now,
+                           later=lambda seconds, callback, *args: self.scheduled.append((seconds, callback, args)))
+
+    def run_scheduled(self):
+        scheduled, self.scheduled = self.scheduled, []
+        for _seconds, callback, args in scheduled:
+            callback(*args)
 
     def entry(self, key='firefox', app_type='sink_input'):
         return self.registry.entries[app_type][key]
@@ -171,6 +178,44 @@ class RuleTest(RegistryTestCase):
         self.pin_app.assert_not_called()
         self.registry.stream_new('sink_input', 1, _stream())
         self.pin_app.assert_called_once_with(101, 'sink', 'chat')
+
+    def test_a_move_nobody_announced_shows_anyway(self):
+        '''pipewire-pulse 1.4 does not always send a change when the session manager moved a stream'''
+        self.pins = {101: True}
+        self.registry.stream_new('sink_input', 1, _stream(device='chat'))
+        self.registry.set_device('sink_input', 'firefox', 'media')
+        self.assertEqual([seconds for seconds, *_ in self.scheduled], [0.5, 2.0])
+        with mock.patch.object(AppModel, 'get_app_by_id', return_value=_stream(device='media', pinned=True)):
+            self.run_scheduled()
+        self.assertEqual(self.entry().streams[1].device, 'media')
+        self.assertEqual(self.entry().known.device, 'media')
+
+    def test_reading_back_leaves_a_stream_alone_that_is_where_it_should_be(self):
+        self.registry.stream_new('sink_input', 1, _stream(device='chat'))
+        self.registry.set_device('sink_input', 'firefox', 'media')
+        self.registry.stream_change('sink_input', 1, _stream(device='media', pinned=True))
+        self.events.clear()
+        with mock.patch.object(AppModel, 'get_app_by_id', return_value=_stream(device='media', pinned=True)):
+            self.run_scheduled()
+        self.assertEqual(self.events, [])
+
+    def test_reading_back_a_stream_that_is_gone_does_nothing(self):
+        self.registry.stream_new('sink_input', 1, _stream(device='chat'))
+        self.registry.set_device('sink_input', 'firefox', 'media')
+        self.registry.stream_remove('sink_input', 1)
+        self.events.clear()
+        with mock.patch.object(AppModel, 'get_app_by_id', side_effect=pulsectl.PulseIndexError(1)) as read:
+            self.run_scheduled()
+        read.assert_not_called()
+        self.assertEqual(self.events, [])
+        self.assertEqual(self.entry().streams, {})
+
+    def test_reading_back_survives_a_stream_that_just_ended(self):
+        self.registry.stream_new('sink_input', 1, _stream(device='chat'))
+        self.registry.set_device('sink_input', 'firefox', 'media')
+        with mock.patch.object(AppModel, 'get_app_by_id', side_effect=pulsectl.PulseIndexError(1)):
+            self.run_scheduled()
+        self.assertEqual(self.entry().streams[1].device, 'chat')
 
     def test_stream_already_in_place_gets_pinned_but_not_moved(self):
         self.remember(device='media')

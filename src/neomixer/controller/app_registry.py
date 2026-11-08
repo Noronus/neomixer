@@ -3,6 +3,7 @@ import time
 import logging
 
 import pulsectl
+from gi.repository import GLib
 
 from neomixer.scripts import pmctl
 from neomixer.model.app_model import AppModel
@@ -15,6 +16,18 @@ LOG = logging.getLogger("generic")
 # Until a new stream has been around this long, what it does is the session manager still
 # placing it: it is corrected. After that a change was made by someone: it is remembered.
 SETTLE_SECONDS = 2.0
+
+# pipewire-pulse 1.4 does not always announce that the session manager moved a stream. A stream
+# that was just pinned is read back after these many seconds, in case its move went unannounced.
+RECHECK_SECONDS = (0.5, 2.0)
+
+
+def _later(seconds, callback, *args):
+    '''Call "callback" on the main loop after "seconds".'''
+    def run():
+        callback(*args)
+        return GLib.SOURCE_REMOVE
+    GLib.timeout_add(int(seconds * 1000), run)
 
 
 class AppEntry:
@@ -96,11 +109,12 @@ class AppRegistry(SignalModel):
         entry_remove(app_type: str, key: str): A program was removed from the list.
     '''
 
-    def __init__(self, device_repository, clock=time.monotonic):
+    def __init__(self, device_repository, clock=time.monotonic, later=_later):
         super().__init__()
         self.device_repository = device_repository
         self.known_apps = device_repository.config.apps
         self.clock = clock
+        self.later = later
         self.entries = {'sink_input': {}, 'source_output': {}}
         self._stream_keys = {'sink_input': {}, 'source_output': {}}
         self._client_keys = {}
@@ -342,6 +356,24 @@ class AppRegistry(SignalModel):
             pmctl.pin_app(stream.object_id, device_type, device_name)
         else:
             pmctl.unpin_app(stream.object_id)
+        for seconds in RECHECK_SECONDS:
+            self.later(seconds, self._recheck, entry.app_type, stream.index)
+
+    def _recheck(self, app_type, index):
+        '''
+        Read a pinned stream back. When its move went unannounced, the mixer would go on showing
+        it where it was: this makes up for the event that never came.
+        '''
+        key = self._stream_keys[app_type].get(index)
+        if key is None:
+            return
+        try:
+            app = AppModel.get_app_by_id(index, app_type)
+        except (pulsectl.PulseError, pulsectl.PulseDisconnected, AttributeError):
+            return  # it is gone, or the device it was on is
+        if app.device != self.entries[app_type][key].streams[index].device:
+            LOG.debug('%s %s moved to %s unannounced', app_type, index, app.device)
+            self.stream_change(app_type, index, app)
 
     @staticmethod
     def _mark_pinned(app, pins=None):
