@@ -2319,6 +2319,14 @@ def _screen(d, name):
                     '--screenshot', os.path.join(d.out_dir, f'{name}.png')], check=True)
 
 
+def _kde_asks(controller):
+    '''
+    Whether KDE asks before it takes new keys. The Plasma on Arch and Fedora does, with version 2
+    of the portal. Plasma 6.3 on Debian 13, with version 1, takes them as they are.
+    '''
+    return controller.portal.version >= 2
+
+
 def kde_hotkeys_set(d):
     '''From clicking a field to a key working in the background, with nothing faked.'''
     yield 1.0
@@ -2330,6 +2338,7 @@ def kde_hotkeys_set(d):
     d.check(controller.available is True, 'KDE has global shortcuts')
     # Version 2 adds opening the desktop's settings, which Plasma 6.3 on Debian 13 does not have yet
     d.check(controller.portal.version >= 1, f'version {controller.portal.version}')
+    asks = _kde_asks(controller)
 
     # Real keys go to the window
     mute = ('vi', '1', 'mute')
@@ -2347,17 +2356,18 @@ def kde_hotkeys_set(d):
     d.check(window.buttons[mute].get_label() == 'Ctrl+Alt+M', window.buttons[mute].get_label())
 
     # Saying no to all of them: not set, and asked again the next time
-    window.apply_button.emit('clicked')
-    yield 1.5
-    d.check(controller.busy, 'the dialog is up')
-    _screen(d, 'kde_dialog')
-    _answer_dialog(False)
-    yield 1.5
-    d.check(not controller.busy, 'cancelled')
-    d.check('mute' not in repository.get_device('vi', '1').hotkeys, 'nothing was set')
-    d.check('did not take' in window.status.get_label(), window.status.get_label())
-    d.check(window.buttons[mute].get_label() == '—', 'the field is empty')
-    d.check(_kde_shortcuts() == {}, f'KDE keeps nothing of it: {_kde_shortcuts()}')
+    if asks:
+        window.apply_button.emit('clicked')
+        yield 1.5
+        d.check(controller.busy, 'the dialog is up')
+        _screen(d, 'kde_dialog')
+        _answer_dialog(False)
+        yield 1.5
+        d.check(not controller.busy, 'cancelled')
+        d.check('mute' not in repository.get_device('vi', '1').hotkeys, 'nothing was set')
+        d.check('did not take' in window.status.get_label(), window.status.get_label())
+        d.check(window.buttons[mute].get_label() == '—', 'the field is empty')
+        d.check(_kde_shortcuts() == {}, f'KDE keeps nothing of it: {_kde_shortcuts()}')
 
     # All kinds of keys, on all kinds of devices
     d.ui.open_hotkey_window()
@@ -2384,10 +2394,11 @@ def kde_hotkeys_set(d):
 
     window.apply_button.emit('clicked')
     yield 1.5
-    d.check(controller.busy, 'the dialog is up')
-    _screen(d, 'kde_dialog_all')
-    _answer_dialog(True)
-    yield 1.5
+    if asks:
+        d.check(controller.busy, 'the dialog is up')
+        _screen(d, 'kde_dialog_all')
+        _answer_dialog(True)
+        yield 1.5
     d.check(not controller.busy, 'confirmed')
     d.check('work now' in window.status.get_label(), window.status.get_label())
     kde = _kde_shortcuts()
@@ -2455,6 +2466,7 @@ def kde_hotkeys_after_reboot(d):
     controller = d.app.hotkey_controller
     repository = d.app.device_repository
     d.check(not controller.busy, 'no question at the start')
+    asks = _kde_asks(controller)
     d.check(len(controller.bound) == 9 and all(controller.bound.values()), f'all are there: {controller.bound}')
     device = repository.get_device('vi', '1')
     muted = _server_mute(device)
@@ -2471,9 +2483,10 @@ def kde_hotkeys_after_reboot(d):
     yield from _set_keys(d, window, ('vi', '1', 'mute'), 'ctrl', 'alt', 'n')
     window.apply_button.emit('clicked')
     yield 1.5
-    d.check(controller.busy, 'asks about the new one')
-    _answer_dialog(True)
-    yield 1.5
+    if asks:
+        d.check(controller.busy, 'asks about the new one')
+        _answer_dialog(True)
+        yield 1.5
     kde = _kde_shortcuts()
     d.check('vi-1-mute-CTRL+ALT+n' in kde and 'vi-1-mute-CTRL+ALT+m' not in kde, f'KDE has the new one and not the old: {sorted(kde)}')
     muted = _server_mute(device)
@@ -2491,9 +2504,10 @@ def kde_hotkeys_after_reboot(d):
     yield from _set_keys(d, window, ('vi', '2', 'mute'), 'ctrl', 'alt', 'm')
     window.apply_button.emit('clicked')
     yield 1.5
-    _screen(d, 'kde_dialog_moved_key')
-    _answer_dialog(True)
-    yield 1.5
+    if asks:
+        _screen(d, 'kde_dialog_moved_key')
+        _answer_dialog(True)
+        yield 1.5
     kde = _kde_shortcuts()
     d.check(kde.get('vi-2-mute-CTRL+ALT+m') == 'Ctrl+Alt+M', f'another device gets those keys: {kde}')
     muted = _server_mute(other)
@@ -2504,28 +2518,30 @@ def kde_hotkeys_after_reboot(d):
     yield 1.0
 
     # Saying no to one, with others already there
-    yield from _set_keys(d, window, ('vi', '2', 'up'), 'ctrl', 'alt', 'i')
-    window.apply_button.emit('clicked')
-    yield 1.5
-    _answer_dialog(False)
-    yield 1.8
-    d.check('up' not in other.hotkeys, 'refused: not set')
-    d.check('vi-2-up-CTRL+ALT+i' not in _kde_shortcuts(), 'KDE keeps nothing of it')
-    d.check(other.hotkeys.get('mute') == 'CTRL+ALT+m', 'the others stay')
-    muted = _server_mute(other)
-    _real_keys('ctrl', 'alt', 'm')
-    yield 1.0
-    d.check(_server_mute(other) is not muted, 'and still work')
-    _real_keys('ctrl', 'alt', 'm')
-    yield 1.0
+    if asks:
+        yield from _set_keys(d, window, ('vi', '2', 'up'), 'ctrl', 'alt', 'i')
+        window.apply_button.emit('clicked')
+        yield 1.5
+        _answer_dialog(False)
+        yield 1.8
+        d.check('up' not in other.hotkeys, 'refused: not set')
+        d.check('vi-2-up-CTRL+ALT+i' not in _kde_shortcuts(), 'KDE keeps nothing of it')
+        d.check(other.hotkeys.get('mute') == 'CTRL+ALT+m', 'the others stay')
+        muted = _server_mute(other)
+        _real_keys('ctrl', 'alt', 'm')
+        yield 1.0
+        d.check(_server_mute(other) is not muted, 'and still work')
+        _real_keys('ctrl', 'alt', 'm')
+        yield 1.0
 
     # And asked again after that
     yield from _set_keys(d, window, ('vi', '2', 'up'), 'ctrl', 'alt', 'i')
     window.apply_button.emit('clicked')
     yield 1.5
-    d.check(controller.busy, 'asks again')
-    _answer_dialog(True)
-    yield 1.5
+    if asks:
+        d.check(controller.busy, 'asks again')
+        _answer_dialog(True)
+        yield 1.5
     d.check(other.hotkeys.get('up') == 'CTRL+ALT+i', 'and then it is set')
 
     # All gone: nothing asked, nothing left at KDE, the keys do nothing
