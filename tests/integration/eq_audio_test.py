@@ -142,7 +142,8 @@ class EqAudioTest(unittest.TestCase):
         Nothing plays here, the app recording is all that keeps this chain running. The EQ's
         nodes are passive, so this has to work without them activating anything themselves.
         '''
-        if not glob.glob('/usr/lib*/spa-0.2/audiotestsrc/libspa-audiotestsrc.so'):
+        plugin = 'spa-0.2/audiotestsrc/libspa-audiotestsrc.so'
+        if not glob.glob(f'/usr/lib*/{plugin}') + glob.glob(f'/usr/lib/*/{plugin}'):
             self.skipTest('this PipeWire comes without the test source, Fedora has none')
 
         mic, bus = 'eqtest_mic', 'eqtest_bus'

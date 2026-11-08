@@ -1,0 +1,13 @@
+Package: neomixer
+Version: @VERSION@-1
+Architecture: all
+Maintainer: NeoMixer contributors <74186111+Noronus@users.noreply.github.com>
+Installed-Size: @SIZE@
+Depends: gir1.2-gtk-4.0, libpulse0, libspa-0.2-modules, pipewire, pipewire-bin, pipewire-pulse, python3, python3-cairo, python3-gi, python3-gi-cairo, python3-pulsectl (>= 23.5.0), python3-pydantic, wireplumber
+Section: sound
+Priority: optional
+Homepage: https://github.com/Noronus/neomixer
+Description: Virtual audio mixer for PipeWire, with an EQ on every channel
+ A virtual audio mixer for PipeWire with Voicemeeter's workflow: channel strips, A/B routing,
+ a parametric EQ on every channel, and programs that stay where you put them. A fork of
+ Pulsemeeter.

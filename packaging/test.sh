@@ -27,4 +27,5 @@ done
 status=0
 run arch docker.io/cachyos/cachyos:latest || status=1
 run fedora registry.fedoraproject.org/fedora:44 || status=1
+run debian docker.io/library/debian:13 || status=1
 exit $status

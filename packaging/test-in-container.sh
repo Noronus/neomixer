@@ -2,7 +2,7 @@
 # Runs inside a clean container: does a package install, is it complete with nothing but its
 # declared dependencies, does it work, and is it gone after removing it?
 #
-#   test-in-container.sh arch|fedora [scenario...]
+#   test-in-container.sh arch|fedora|debian [scenario...]
 set -uo pipefail
 distro=$1
 failed=0
@@ -38,6 +38,17 @@ fedora)
     install_test_packages() { dnf -y -q install "${test_packages[@]}"; }
     remove_package() { dnf -y remove neomixer; }
     ;;
+debian)
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq || exit 1
+    # Without what it recommends: what it depends on has to be enough
+    apt-get install -y --no-install-recommends /packages/neomixer_*.deb || exit 1
+    dpkg -L neomixer >/tmp/package-files
+    test_packages=(kwin-wayland mutter ffmpeg python3-pytest fonts-dejavu-core desktop-file-utils pulseaudio-utils util-linux dbus-daemon libglib2.0-bin findutils procps
+                   xdg-desktop-portal xdg-desktop-portal-kde python3-pywayland plasma-wayland-protocols)
+    install_test_packages() { apt-get install -y -qq "${test_packages[@]}"; }
+    remove_package() { apt-get purge -y --autoremove neomixer; }
+    ;;
 esac
 
 echo "=== with nothing but the declared dependencies"
@@ -56,7 +67,8 @@ for command in pw-cli pw-link pw-dump pw-metadata pw-loopback pipewire pipewire-
 done
 for module in pipewire-0.3/libpipewire-module-filter-chain.so pipewire-0.3/libpipewire-module-protocol-pulse.so \
               spa-0.2/filter-graph/libspa-filter-graph-plugin-builtin.so; do
-    check "$module is there" sh -c "ls /usr/lib*/$module"
+    # Debian puts libraries in a directory per architecture
+    check "$module is there" sh -c "ls /usr/lib*/$module || ls /usr/lib/*/$module"
 done
 
 echo "=== the test tools"
