@@ -14,16 +14,26 @@ depends=(
   'python'
   'python-cairo'
   'python-gobject'
-  'python-pulsectl'
-  'python-pulsectl-asyncio'
   'python-pydantic'
   'wireplumber'
 )
 makedepends=('python-babel')
-source=("$pkgname-$pkgver.tar.gz")
-sha256sums=('SKIP')
+# Arch has no package of pulsectl and pulsectl-asyncio, so they come along
+source=("$pkgname-$pkgver.tar.gz"
+        'pulsectl-24.12.0-py2.py3-none-any.whl'
+        'pulsectl_asyncio-1.3.2-py3-none-any.whl')
+noextract=('pulsectl-24.12.0-py2.py3-none-any.whl'
+           'pulsectl_asyncio-1.3.2-py3-none-any.whl')
+sha256sums=('SKIP'
+            '13a60be940594f03ead3245b3dfe3aff4a3f9a792af347674bde5e716d4f76d2'
+            'aa3adf89fe91a80ec1a5c92de3dcfd17a8f171006a07a2ec59a4a13d031fc70d')
 
 package() {
   cd "$pkgname-$pkgver"
+  install -d "$pkgdir/usr/lib/neomixer"
+  for wheel in "$srcdir"/*.whl; do
+    python -m zipfile -e "$wheel" "$pkgdir/usr/lib/neomixer"
+  done
+  rm -r "$pkgdir/usr/lib/neomixer/pulsectl/tests"
   packaging/install-tree.sh "$pkgdir"
 }

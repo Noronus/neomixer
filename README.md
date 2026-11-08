@@ -32,10 +32,13 @@ Carneiro. It imports your Pulsemeeter config on first start.
 
 ## Install
 
+Download the package for your distro from the [latest release](https://github.com/Noronus/neomixer/releases/latest), then:
+
 | | |
 |---|---|
-| CachyOS | `sudo pacman -U neomixer-*.pkg.tar.zst` |
+| Arch, CachyOS | `sudo pacman -U neomixer-*.pkg.tar.zst` |
 | Fedora | `sudo dnf install ./neomixer-*.rpm` |
+| Debian 13 | `sudo apt install ./neomixer_*_all.deb` |
 | From this checkout | `pipx install .`, the first start adds the launcher to your menu |
 
 It needs PipeWire with `pipewire-pulse`, and GTK 4, which the packages pull in. Quit Pulsemeeter

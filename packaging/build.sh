@@ -5,12 +5,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-ARCH_IMAGE=docker.io/cachyos/cachyos:latest
+ARCH_IMAGE=docker.io/library/archlinux:latest
 FEDORA_IMAGE=registry.fedoraproject.org/fedora:44
 DEBIAN_IMAGE=docker.io/library/debian:13
-# Debian has no package of it, so the .deb brings its own
-PULSECTL_ASYNCIO=https://files.pythonhosted.org/packages/py3/p/pulsectl-asyncio/pulsectl_asyncio-1.3.2-py3-none-any.whl
-PULSECTL_ASYNCIO_SHA256=aa3adf89fe91a80ec1a5c92de3dcfd17a8f171006a07a2ec59a4a13d031fc70d
+# Libraries that Arch or Debian have no package of, so their packages bring them along
+WHEELS=(
+    'https://files.pythonhosted.org/packages/62/a9/5b119f86dd1a053c55da7d0355fca2ad215bae6f7f4777d46b307a8cc3e9/pulsectl-24.12.0-py2.py3-none-any.whl 13a60be940594f03ead3245b3dfe3aff4a3f9a792af347674bde5e716d4f76d2'
+    'https://files.pythonhosted.org/packages/py3/p/pulsectl-asyncio/pulsectl_asyncio-1.3.2-py3-none-any.whl aa3adf89fe91a80ec1a5c92de3dcfd17a8f171006a07a2ec59a4a13d031fc70d'
+)
 
 version=$(sed -n "s/^VERSION = '\(.*\)'/\1/p" src/neomixer/settings.py)
 out=$(realpath -m "${1:-dist/packages}")
@@ -26,9 +28,11 @@ trap 'rm -rf "$work"' EXIT
 git archive --prefix="neomixer-$version/" -o "$work/neomixer-$version.tar.gz" HEAD
 sed "s/@VERSION@/$version/" packaging/arch/PKGBUILD >"$work/PKGBUILD"
 cp packaging/fedora/neomixer.spec packaging/debian/build-deb.sh "$work/"
-wheel=$work/${PULSECTL_ASYNCIO##*/}
-curl -fsSLo "$wheel" "$PULSECTL_ASYNCIO"
-echo "$PULSECTL_ASYNCIO_SHA256  $wheel" | sha256sum -c --quiet
+for entry in "${WHEELS[@]}"; do
+    read -r url sha256 <<<"$entry"
+    curl -fsSLo "$work/${url##*/}" "$url"
+    echo "$sha256  $work/${url##*/}" | sha256sum -c --quiet
+done
 
 # makepkg refuses to run as root
 podman run --rm -v "$work:/in:ro" -v "$out:/out" "$ARCH_IMAGE" bash -euc '
@@ -37,7 +41,7 @@ podman run --rm -v "$work:/in:ro" -v "$out:/out" "$ARCH_IMAGE" bash -euc '
     pacman -Syu --noconfirm --needed base-devel python python-babel >/dev/null
     useradd -m builder
     install -d -o builder /home/builder/pkg
-    install -o builder /in/PKGBUILD /in/*.tar.gz /home/builder/pkg/
+    install -o builder /in/PKGBUILD /in/*.tar.gz /in/*.whl /home/builder/pkg/
     su builder -c "cd ~/pkg && makepkg --nodeps --noconfirm"
     cp /home/builder/pkg/*.pkg.tar.zst /out/
 '
