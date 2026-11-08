@@ -47,9 +47,10 @@ debian)
     # Without what it recommends: what it depends on has to be enough
     apt-get install -y --no-install-recommends /packages/neomixer_*.deb || exit 1
     dpkg -L neomixer >/tmp/package-files
-    # python3-pywayland does not work without python3-cffi-backend, but does not depend on it
+    # python3-pywayland does not work without python3-cffi-backend, but does not depend on it, and its
+    # scanner needs pkg-config and the .pc files of libwayland-dev
     test_packages=(kwin-wayland mutter ffmpeg python3-pytest fonts-dejavu-core desktop-file-utils pulseaudio-utils util-linux dbus-daemon libglib2.0-bin findutils procps
-                   xdg-desktop-portal xdg-desktop-portal-kde python3-pywayland python3-cffi-backend plasma-wayland-protocols)
+                   xdg-desktop-portal xdg-desktop-portal-kde python3-pywayland python3-cffi-backend pkgconf libwayland-dev plasma-wayland-protocols)
     install_test_packages() { apt-get install -y -qq "${test_packages[@]}"; }
     remove_package() { apt-get purge -y --autoremove neomixer; }
     ;;
