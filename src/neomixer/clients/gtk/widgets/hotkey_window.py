@@ -15,11 +15,13 @@ from gi.repository import Gdk, GObject, Gtk, Pango  # noqa: E402
 _ = gettext.gettext
 
 NO_KEY = '—'
+OSD_LABEL = _('On screen')
+OSD_TOOLTIP = _('Show the volume on screen when a key changes it, while the mixer is not in front')
 MIN_STEP = 1
 MAX_STEP = 25
 MAX_SNAP_DB = 6
 # Roughly, so that all fits at the text sizes people use. Past that it scrolls.
-WINDOW_WIDTH = 780
+WINDOW_WIDTH = 880
 HEIGHT_AROUND_LIST = 230
 HEIGHT_PER_DEVICE = 40
 HEIGHT_PER_SECTION = 44
@@ -65,6 +67,7 @@ class HotkeyWindow(Gtk.Window):
         'configure': (GObject.SignalFlags.RUN_FIRST, GObject.TYPE_NONE, ()),
         'step_changed': (GObject.SignalFlags.RUN_FIRST, GObject.TYPE_NONE, (int,)),
         'snap_changed': (GObject.SignalFlags.RUN_FIRST, GObject.TYPE_NONE, (float,)),
+        'osd_changed': (GObject.SignalFlags.RUN_FIRST, GObject.TYPE_NONE, (str, str, bool)),
     }
 
     def __init__(self, step, snap_db, **kwargs):
@@ -74,6 +77,7 @@ class HotkeyWindow(Gtk.Window):
         self.saved = {}  # (device_type, device_id, action): keys
         self.edits = {}  # the same, not applied yet. None removes it.
         self.buttons = {}
+        self.osd_checks = {}  # (device_type, device_id): its switch for the volume on screen
         self.capturing = None
         self.state = None
         self.problem = None
@@ -140,13 +144,13 @@ class HotkeyWindow(Gtk.Window):
 
     def set_devices(self, devices):
         '''
-            "devices" are (device_type, device_id, nick, {action: keys})
+            "devices" are (device_type, device_id, nick, {action: keys}, volume on screen)
         '''
         rows_changed = [device[:3] for device in devices] != [device[:3] for device in self.devices]
         self.devices = devices
         self.saved = {
             (device_type, device_id, action): trigger
-            for device_type, device_id, _nick, hotkeys in devices
+            for device_type, device_id, _nick, hotkeys, _osd in devices
             for action, trigger in hotkeys.items()
         }
         known = {(device_type, device_id) for device_type, device_id, *_ in devices}
@@ -155,6 +159,7 @@ class HotkeyWindow(Gtk.Window):
             self.capturing = None
         if rows_changed:
             self._build_grid()
+        self._refresh_osd_checks()
         if not self.get_mapped():
             sections = len({device_type for device_type, *_ in devices})
             height = HEIGHT_AROUND_LIST + HEIGHT_PER_DEVICE * len(devices) + HEIGHT_PER_SECTION * sections
@@ -177,15 +182,21 @@ class HotkeyWindow(Gtk.Window):
         while (child := self.grid.get_first_child()) is not None:
             self.grid.remove(child)
         self.buttons = {}
+        self.osd_checks = {}
 
         for column, action in enumerate(ACTIONS):
             title = Gtk.Label(label=ACTION_LABELS[action])
             title.add_css_class('hotkey-column')
             self.grid.attach(title, column + 1, 0, 1, 1)
+        osd_column = len(ACTIONS) + 1
+        title = Gtk.Label(label=OSD_LABEL, margin_start=6)
+        title.add_css_class('hotkey-column')
+        title.set_tooltip_text(OSD_TOOLTIP)
+        self.grid.attach(title, osd_column, 0, 1, 1)
 
         row = 1
         current_type = None
-        for device_type, device_id, nick, _hotkeys in self.devices:
+        for device_type, device_id, nick, _hotkeys, _osd in self.devices:
             if device_type != current_type:
                 current_type = device_type
                 section = Gtk.Box(margin_top=8)
@@ -193,7 +204,7 @@ class HotkeyWindow(Gtk.Window):
                 title = Gtk.Label(label=DEVICE_TYPE_SHORT[device_type].upper(), xalign=0)
                 title.add_css_class('section-title')
                 section.append(title)
-                self.grid.attach(section, 0, row, 4, 1)
+                self.grid.attach(section, 0, row, osd_column + 1, 1)
                 row += 1
 
             label = Gtk.Label(label=nick, xalign=0, hexpand=True, ellipsize=Pango.EllipsizeMode.END, max_width_chars=18)
@@ -212,8 +223,32 @@ class HotkeyWindow(Gtk.Window):
                 )
                 self.grid.attach(button, column + 1, row, 1, 1)
                 self.buttons[key] = button
+
+            # Not about keys, so it does not wait for Apply: it is up to the mixer alone
+            check = Gtk.CheckButton(halign=Gtk.Align.CENTER, margin_start=6)
+            check.set_tooltip_text(OSD_TOOLTIP)
+            Gtk.Accessible.update_property(check, [Gtk.AccessibleProperty.LABEL], [f'{nick}: {OSD_LABEL}'])
+            check.connect('toggled', self._on_osd_toggled, device_type, device_id)
+            self.grid.attach(check, osd_column, row, 1, 1)
+            self.osd_checks[(device_type, device_id)] = check
             row += 1
         self._refresh_buttons()
+        self._refresh_osd_checks()
+
+    def _refresh_osd_checks(self):
+        for device_type, device_id, _nick, _hotkeys, osd in self.devices:
+            check = self.osd_checks.get((device_type, device_id))
+            if check is not None and check.get_active() != osd:
+                check.handler_block_by_func(self._on_osd_toggled)
+                check.set_active(osd)
+                check.handler_unblock_by_func(self._on_osd_toggled)
+
+    def _on_osd_toggled(self, check, device_type, device_id):
+        self.devices = [
+            (*device[:4], check.get_active()) if device[:2] == (device_type, device_id) else device
+            for device in self.devices
+        ]
+        self.emit('osd_changed', device_type, device_id, check.get_active())
 
     def trigger_of(self, key):
         '''The keys of an action as they will be: an edit if there is one, otherwise what is saved.'''
@@ -311,7 +346,7 @@ class HotkeyWindow(Gtk.Window):
             return
 
         trigger = make_trigger(modifiers, key)
-        for device_type, device_id, nick, _hotkeys in self.devices:
+        for device_type, device_id, nick, _hotkeys, _osd in self.devices:
             for action in ACTIONS:
                 other = (device_type, device_id, action)
                 if other != self.capturing and self.trigger_of(other) == trigger:

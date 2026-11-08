@@ -2116,6 +2116,160 @@ def hotkeys_other_desktops(d):
     os.remove(os.path.join(os.environ['NEOMIXER_SANDBOX'], 'state', 'fake_portal.json'))
 
 
+class FakeOsd:
+    '''KDE's volume OSD and a notification daemon, on a connection of their own: what the app shows.'''
+
+    XML = """
+    <node>
+      <interface name="org.kde.osdService">
+        <method name="mediaPlayerVolumeChanged">
+          <arg type="i" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="in"/>
+        </method>
+        <method name="showText"><arg type="s" direction="in"/><arg type="s" direction="in"/></method>
+      </interface>
+      <interface name="org.freedesktop.Notifications">
+        <method name="Notify">
+          <arg type="s" direction="in"/><arg type="u" direction="in"/><arg type="s" direction="in"/>
+          <arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="as" direction="in"/>
+          <arg type="a{sv}" direction="in"/><arg type="i" direction="in"/><arg type="u" direction="out"/>
+        </method>
+      </interface>
+    </node>
+    """
+
+    def __init__(self, d):
+        from gi.repository import Gio
+        address = Gio.dbus_address_get_for_bus_sync(Gio.BusType.SESSION, None)
+        flags = Gio.DBusConnectionFlags.AUTHENTICATION_CLIENT | Gio.DBusConnectionFlags.MESSAGE_BUS_CONNECTION
+        self.bus = Gio.DBusConnection.new_for_address_sync(address, flags, None, None)
+        self.calls = []
+        kde, notifications = Gio.DBusNodeInfo.new_for_xml(self.XML).interfaces
+        self.bus.register_object('/org/kde/osdService', kde, self._on_call, None, None)
+        self.bus.register_object('/org/freedesktop/Notifications', notifications, self._on_call, None, None)
+        for name in ('org.kde.plasmashell', 'org.freedesktop.Notifications'):
+            Gio.bus_own_name_on_connection(self.bus, name, Gio.BusNameOwnerFlags.NONE, None, None)
+        d.players.append(self)
+
+    def _on_call(self, _bus, _sender, _path, _interface, method, parameters, invocation):
+        from gi.repository import GLib
+        self.calls.append((method, parameters.unpack()))
+        invocation.return_value(GLib.Variant('(u)', (len(self.calls),)) if method == 'Notify' else None)
+
+    def take(self):
+        calls, self.calls = self.calls, []
+        return calls
+
+    def stop(self):
+        if not self.bus.is_closed():
+            self.bus.close_sync(None)
+
+
+def hotkeys_show_volume(d):
+    '''A switch for each device: its volume on screen, when a hotkey changes it and the mixer is not in front.'''
+    import json
+    import os
+    from neomixer.settings import CONFIG_FILE
+
+    osd = FakeOsd(d)
+    controller = d.app.hotkey_controller
+    repository = d.app.device_repository
+    d.ui.osd.kde = True
+    yield 0.5
+    d.ui.open_hotkey_window()
+    yield 0.5
+    window = d.ui.hotkey_window
+    expected = {(device_type, device_id) for device_type, devices in repository.get_all_devices().items()
+                for device_id in devices}
+    d.check(set(window.osd_checks) == expected, f'every device has the switch: {len(window.osd_checks)}')
+    d.check(not any(check.get_active() for check in window.osd_checks.values()), 'off until switched on')
+    window.osd_checks[('vi', '1')].set_active(True)
+    window.osd_checks[('hi', '1')].set_active(True)
+    d.check(repository.get_device('vi', '1').hotkey_osd, 'it is in the config at once')
+    d.check(not window.edits, 'and not one of the keys waiting for Apply')
+    yield 0.2
+    d.shot('hotkeys_osd', window)
+    window.close()
+    yield 0.2
+
+    device = repository.get_device('vi', '1')
+    strip_widget = d.content.device_box['vi'].widgets['1']
+    strip_widget.volume_widget.set_value(90)
+    d.ui.show_window()
+    yield 0.8
+    d.check(d.app.window.is_active(), 'the mixer is in front')
+    controller.run_action('vi', '1', 'up')
+    yield 0.3
+    d.check(_volume(device) == 95, f'the key works: {_volume(device)}')
+    d.check(osd.take() == [], 'in front, the faders show it')
+
+    d.ui.hide_window()
+    yield 0.3
+    controller.run_action('vi', '1', 'up')
+    yield 0.3
+    d.check(osd.take() == [('mediaPlayerVolumeChanged', (100, 'in1: 0.0 dB', 'audio-volume-high'))],
+            'not in front: the volume with its name, a full bar at 0 dB')
+    controller.run_action('vi', '1', 'up')
+    yield 0.3
+    d.check(osd.take() == [('showText', ('audio-volume-high-warning', 'in1: +1.3 dB · 105%'))],
+            'louder than the bar goes, in words')
+    controller.run_action('vi', '1', 'mute')
+    yield 0.3
+    d.check(osd.take() == [('showText', ('audio-volume-muted', 'in1: muted, +1.3 dB'))], 'muted, and to what')
+    controller.run_action('vi', '1', 'mute')
+    yield 0.3
+    osd.take()
+
+    controller.run_action('hi', '1', 'down')
+    yield 0.3
+    calls = osd.take()
+    d.check(len(calls) == 1 and calls[0][1][2].startswith('microphone-sensitivity'), f'a microphone looks like one: {calls}')
+    controller.run_action('hi', '1', 'up')
+    yield 0.3
+    osd.take()
+
+    controller.run_action('vi', '2', 'up')
+    yield 0.3
+    d.check(osd.take() == [], 'a device without the switch shows nothing')
+    controller.run_action('vi', '2', 'down')
+
+    # Elsewhere than KDE
+    d.ui.osd.kde = False
+    controller.run_action('vi', '1', 'down')
+    yield 0.3
+    calls = osd.take()
+    d.check(len(calls) == 1 and calls[0][0] == 'Notify' and calls[0][1][3:5] == ('in1', '0.0 dB'),
+            f'a notification: {calls}')
+    d.check(calls and calls[0][1][6].get('value') == 100, 'with the bar for daemons that draw one')
+    controller.run_action('vi', '1', 'down')
+    yield 0.3
+    calls = osd.take()
+    d.check(calls and calls[0][1][1] == 1, f'replacing the one before: {calls}')
+    d.ui.osd.kde = True
+
+    # KDE's shell gone: a notification instead, and no error
+    # The name goes, the connection stays for the notifications
+    from gi.repository import Gio, GLib
+    osd.bus.call_sync('org.freedesktop.DBus', '/org/freedesktop/DBus', 'org.freedesktop.DBus', 'ReleaseName',
+                      GLib.Variant('(s)', ('org.kde.plasmashell',)), None, Gio.DBusCallFlags.NONE, 1000, None)
+    controller.run_action('vi', '1', 'up')
+    yield 0.4
+    calls = osd.take()
+    d.check([call[0] for call in calls] == ['Notify'], f'without KDE\'s shell, a notification: {calls}')
+
+    yield 3.0  # past the autosave
+    with open(CONFIG_FILE, encoding='utf-8') as config:
+        saved = json.load(config)['devices']
+    d.check(saved['vi']['1']['hotkey_osd'] and not saved['vi']['2']['hotkey_osd'], 'the switch is saved with the device')
+
+    # As it was, for the scenarios after this one
+    device.hotkey_osd = False
+    repository.get_device('hi', '1').hotkey_osd = False
+    strip_widget.volume_widget.set_value(100)
+    d.ui.show_window()
+    yield 3.0
+    d.check(os.path.exists(CONFIG_FILE), 'saved')
+
+
 def _real_keys(*keys, hold=None):
     '''Real key presses in the session's KWin, see kde_keys.py. Not waited for: holding one has to be seen.'''
     import os

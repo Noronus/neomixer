@@ -84,6 +84,7 @@ SCENARIOS = (
     ('hotkeys_work', 0),
     ('hotkeys_after_restart', 0),
     ('hotkeys_other_desktops', 0),
+    ('hotkeys_show_volume', 0),
     ('cpu_usage', 0),
     ('set_everything_then_get_killed', -signal.SIGKILL),
     ('REBOOT', None),

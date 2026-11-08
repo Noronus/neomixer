@@ -16,6 +16,7 @@ from neomixer.model.signal_model import SignalModel
 from neomixer.model.config_model import ConfigModel
 from neomixer.model.device_model import DeviceModel
 
+from neomixer.clients.gtk.osd import VolumeOsd
 from neomixer.clients.gtk.text_size import TextScaler
 from neomixer.clients.gtk.widgets.content import Content, SECTION_ORDER
 from neomixer.clients.gtk.widgets.common.volume_widget import snap_to_unity
@@ -119,6 +120,7 @@ class GtkController(SignalModel):
         self.content = None
         self.welcome_window = None
         self.hotkey_window = None
+        self.osd = VolumeOsd()
         self.text_scaler = None
         self.status_label = None
         self.vumeter_tasks = {'a': {}, 'b': {}, 'vi': {}, 'hi': {}}
@@ -536,6 +538,7 @@ class GtkController(SignalModel):
         self.hotkey_window.connect('configure', lambda _: self.emit('hotkeys_configure'))
         self.hotkey_window.connect('step_changed', self._on_hotkey_step_changed)
         self.hotkey_window.connect('snap_changed', self._on_hotkey_snap_changed)
+        self.hotkey_window.connect('osd_changed', self._on_hotkey_osd_changed)
         self.hotkey_window.connect('close-request', self._on_hotkey_window_close)
         self.hotkey_window.set_devices(self._hotkey_devices())
         self.text_scaler.track(self.hotkey_window)
@@ -553,9 +556,14 @@ class GtkController(SignalModel):
     def _on_hotkey_snap_changed(self, _, snap_db):
         self.config_model.snap_db = snap_db
 
+    def _on_hotkey_osd_changed(self, _, device_type, device_id, state):
+        device = self.device_repository.get_device(device_type, device_id)
+        if device is not None:
+            device.hotkey_osd = state
+
     def _hotkey_devices(self):
         return [
-            (device_type, device_id, device.nick, dict(device.hotkeys))
+            (device_type, device_id, device.nick, dict(device.hotkeys), device.hotkey_osd)
             for device_type in SECTION_ORDER
             for device_id, device in sorted(self.device_repository.get_devices_by_type(device_type).items(), key=lambda i: int(i[0]))
         ]
@@ -576,6 +584,7 @@ class GtkController(SignalModel):
 
         if action == 'mute':
             widget.mute_widget.set_active(not widget.mute_widget.get_active())
+            self._show_volume(widget)
             return False
 
         volume = widget.volume_widget.get_value()
@@ -584,7 +593,20 @@ class GtkController(SignalModel):
         if held and action == 'up':
             target = min(target, max(volume, HOTKEY_HOLD_CEILING))
         widget.volume_widget.set_value(target)
+        # Also when it is at the end already: the key was pressed to know, too
+        self._show_volume(widget)
         return widget.volume_widget.get_value() != volume
+
+    def mixer_in_front(self):
+        '''Is the mixer where its faders can be seen moving: shown, and what the keyboard is on.'''
+        return self.window is not None and self.window.get_visible() and self.window.is_active()
+
+    def _show_volume(self, widget):
+        '''The volume on screen, for a device that has it switched on, see clients.gtk.osd.'''
+        device = widget.device_model
+        if device.hotkey_osd and not self.mixer_in_front():
+            self.osd.show(device.nick, widget.volume_widget.get_value(), widget.mute_widget.get_active(),
+                          device.device_type == 'source')
 
     def connection_settings_hijack(self, device_widget, output_type, output_id, input_type, input_id):
         '''

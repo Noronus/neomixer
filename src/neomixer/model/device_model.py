@@ -32,6 +32,7 @@ class DeviceModel(BaseModel):
     selected_channels: list[bool] | None
     eq: EqModel = Field(default_factory=EqModel)
     hotkeys: dict[str, str] = Field(default_factory=dict)  # action: keys, see utils.hotkeys
+    hotkey_osd: bool = False  # show the volume on screen when a hotkey changes it, see clients.gtk.osd
 
     # Transient runtime status (not persisted).
     # init_failed/init_error: hard error (e.g. pw-cli failed to create) - UI shows warning.

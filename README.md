@@ -55,6 +55,7 @@ its window closes: start it again from the menu to get the window back.
 | Make a device the system default | **★** on its strip |
 | Keep it the default, whatever other programs do | The lock on its strip |
 | Mute or change the volume with keys, from any program | Settings menu, **Hotkeys…**. Your desktop asks once to confirm new keys |
+| See a channel's volume while using its keys in another program | **On screen** next to its keys, in the same window |
 | Quit for real | Settings menu, or the tray icon's menu, or `neomixer quit` |
 
 Closing the window keeps NeoMixer running, since new streams only reach their remembered output
@@ -64,6 +65,9 @@ Hotkeys go through the desktop's global shortcuts portal, the one way a program 
 KDE and GNOME have it. Holding a volume key keeps going up to 0 dB, past that takes a press each. A press
 toward 0 dB snaps to it when it lands within 1 dB, or would go past it; that is a setting in the same window. On a
 desktop without it, bind keys in its settings to `neomixer hotkey <hi|vi|a|b> <id> <mute|up|down>`.
+
+With **On screen** switched on for a channel, its keys show its name, dB and volume the way the desktop shows the
+system volume, while the mixer is not in front: KDE's own OSD, a full bar is 0 dB. Elsewhere it is a notification.
 
 Files: `~/.config/neomixer/config.json` and `~/.local/state/neomixer/neomixer.log`.
 

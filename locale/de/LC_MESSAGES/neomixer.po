@@ -647,6 +647,20 @@ msgstr "Ein Tastendruck Richtung 0 dB, der so nah daran landet oder darüber hin
 msgid "Snap to 0 dB within ± (dB)"
 msgstr "Bei 0 dB einrasten im Bereich ± (dB)"
 
+msgid "On screen"
+msgstr "Einblenden"
+
+msgid "Show the volume on screen when a key changes it, while the mixer is not in front"
+msgstr "Die Lautstärke einblenden, wenn eine Taste sie ändert und der Mixer nicht im Vordergrund ist"
+
+#, python-format
+msgid "muted, %s"
+msgstr "stumm, %s"
+
+#, python-format
+msgid "%d%%"
+msgstr "%d %%"
+
 msgid "Desktop settings"
 msgstr "Desktop-Einstellungen"
 
