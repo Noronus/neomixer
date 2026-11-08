@@ -2,7 +2,7 @@
 # Runs inside a clean container: does a package install, is it complete with nothing but its
 # declared dependencies, does it work, and is it gone after removing it?
 #
-#   test-in-container.sh arch|fedora|debian [scenario...]
+#   test-in-container.sh arch|cachyos|fedora|debian [scenario...]
 set -uo pipefail
 distro=$1
 failed=0
@@ -19,14 +19,17 @@ check() {
 }
 
 case $distro in
-arch)
+arch|cachyos)
     # Its sandbox for hooks cannot isolate the network in a container without privileges
     sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf
+    # Arch's image leaves out translations and docs, which would leave out NeoMixer's too
+    sed -i '/^NoExtract/d' /etc/pacman.conf
     pacman -Syu --noconfirm >/dev/null || exit 1
     pacman -U --noconfirm /packages/neomixer-*.pkg.tar.zst || exit 1
     pacman -Qlq neomixer >/tmp/package-files
+    # pywayland's scanner runs pkg-config, which Arch's image does not have and CachyOS's does
     test_packages=(kwin ffmpeg python-pytest ttf-dejavu desktop-file-utils util-linux
-                   xdg-desktop-portal xdg-desktop-portal-kde python-pywayland plasma-wayland-protocols)
+                   xdg-desktop-portal xdg-desktop-portal-kde python-pywayland pkgconf plasma-wayland-protocols)
     install_test_packages() { pacman -S --noconfirm --needed "${test_packages[@]}"; }
     remove_package() { pacman -Rns --noconfirm neomixer; }
     ;;
@@ -44,8 +47,9 @@ debian)
     # Without what it recommends: what it depends on has to be enough
     apt-get install -y --no-install-recommends /packages/neomixer_*.deb || exit 1
     dpkg -L neomixer >/tmp/package-files
+    # python3-pywayland does not work without python3-cffi-backend, but does not depend on it
     test_packages=(kwin-wayland mutter ffmpeg python3-pytest fonts-dejavu-core desktop-file-utils pulseaudio-utils util-linux dbus-daemon libglib2.0-bin findutils procps
-                   xdg-desktop-portal xdg-desktop-portal-kde python3-pywayland plasma-wayland-protocols)
+                   xdg-desktop-portal xdg-desktop-portal-kde python3-pywayland python3-cffi-backend plasma-wayland-protocols)
     install_test_packages() { apt-get install -y -qq "${test_packages[@]}"; }
     remove_package() { apt-get purge -y --autoremove neomixer; }
     ;;

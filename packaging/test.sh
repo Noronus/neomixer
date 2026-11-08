@@ -2,7 +2,7 @@
 # Installs the built packages in a clean container of each distro, and tests what got installed.
 # A container reaches nothing of the desktop it runs on.
 #
-#   packaging/test.sh [packages dir] [screenshot dir]
+#   packaging/test.sh [packages dir] [screenshot dir] [arch|cachyos|fedora|debian...]    default: all
 set -uo pipefail
 cd "$(dirname "$0")/.."
 packages=$(realpath "${1:-dist/packages}")
@@ -24,8 +24,17 @@ for node in /dev/dri/renderD*; do
     render_nodes+=(--device "$node")
 done
 
+distros=("${@:3}")
+[ ${#distros[@]} -gt 0 ] || distros=(arch cachyos fedora debian)
 status=0
-run arch docker.io/cachyos/cachyos:latest || status=1
-run fedora registry.fedoraproject.org/fedora:44 || status=1
-run debian docker.io/library/debian:13 || status=1
+for distro in "${distros[@]}"; do
+    case $distro in
+        arch) image=docker.io/library/archlinux:latest ;;
+        cachyos) image=docker.io/cachyos/cachyos:latest ;;
+        fedora) image=registry.fedoraproject.org/fedora:44 ;;
+        debian) image=docker.io/library/debian:13 ;;
+        *) echo "unknown distro: $distro" >&2; exit 2 ;;
+    esac
+    run "$distro" "$image" || status=1
+done
 exit $status

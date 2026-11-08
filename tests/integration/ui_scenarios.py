@@ -2328,7 +2328,8 @@ def kde_hotkeys_set(d):
     yield 1.5
     window = d.ui.hotkey_window
     d.check(controller.available is True, 'KDE has global shortcuts')
-    d.check(controller.portal.version >= 2, f'version {controller.portal.version}')
+    # Version 2 adds opening the desktop's settings, which Plasma 6.3 on Debian 13 does not have yet
+    d.check(controller.portal.version >= 1, f'version {controller.portal.version}')
 
     # Real keys go to the window
     mute = ('vi', '1', 'mute')
