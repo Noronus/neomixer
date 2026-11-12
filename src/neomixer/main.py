@@ -20,9 +20,9 @@ from gi.repository import Gio, GLib  # noqa: E402
 LOG = logging.getLogger("generic")
 
 
-def start_gui(hidden=False):
+def start_gui(hidden=False, quit_on_close=False):
     install_launcher()
-    app = GtkClient(start_hidden=hidden)
+    app = GtkClient(start_hidden=hidden, quit_on_close=quit_on_close)
     return app.run(None)
 
 
@@ -111,9 +111,9 @@ def main():
     parsed = parse_args()
     command = parsed.command
     if command is None:
-        return start_gui(parsed.hidden)
+        return start_gui(parsed.hidden, parsed.quit_on_close)
 
-    args = [value for name, value in vars(parsed).items() if name not in ('command', 'hidden')]
+    args = [value for name, value in vars(parsed).items() if name not in ('command', 'hidden', 'quit_on_close')]
     return arg_map[command](*args) or 0
 
 

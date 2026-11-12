@@ -64,6 +64,9 @@ def parse_args():
     LOG.debug('Parsing args...')
     parser = argparse.ArgumentParser(description='NeoMixer')
     parser.add_argument('--hidden', action='store_true', help='Start in the background, without opening the window')
+    parser.add_argument('--quit-on-close', action='store_true',
+                        help='Quit when the window is closed, also with "keep running in the background" on. '
+                             'For a window shown on another machine, where there is no tray to bring it back')
     subparser = parser.add_subparsers(dest='command')
 
     subparser.add_parser('quit', help='Quit the running instance')

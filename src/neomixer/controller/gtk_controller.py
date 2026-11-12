@@ -110,6 +110,7 @@ class GtkController(SignalModel):
 
         self.device_repository = device_repository
         self.config_model = device_repository.config
+        self.quit_on_close = False
 
         # create vumeter loop thread
         self.vumeter_loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
@@ -210,7 +211,7 @@ class GtkController(SignalModel):
         Called when the main window gets closed
         '''
         self.save_window_state()
-        if self.config_model.background:
+        if self.config_model.background and not self.quit_on_close:
             self.hide_window()
             return True
         return False

@@ -56,13 +56,14 @@ class GtkClient(Gtk.Application):
         config_model (ConfigModel): The configuration model instance.
     '''
 
-    def __init__(self, start_hidden=False):
+    def __init__(self, start_hidden=False, quit_on_close=False):
         '''
         Initialize the GtkClient application. The audio graph is only touched once this is
         known to be the first instance, see do_startup.
         '''
         super().__init__(application_id=APP_ID)
         self.start_hidden = start_hidden
+        self.quit_on_close = quit_on_close
         self.window = None
         self.tray = None
         self.gtk_controller_handlers = {}
@@ -131,6 +132,7 @@ class GtkClient(Gtk.Application):
         style.load()
         self.connect_registry_events()
         self.window = self.gtk_controller.create_window(self)
+        self.gtk_controller.quit_on_close = self.quit_on_close
         self.connect_gtk_controller_events()
         self.connect_device_controller_events()
         self.connect_event_controller_events()
