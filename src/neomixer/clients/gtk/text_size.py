@@ -142,7 +142,11 @@ class TextScaler:
         css = '\n'.join(rules)
         if css != self.css:
             self.css = css
-            self.provider.load_from_string(css)
+            # load_from_string is GTK 4.12, Debian 12 has 4.8
+            if hasattr(self.provider, 'load_from_string'):
+                self.provider.load_from_string(css)
+            else:
+                self.provider.load_from_data(css.encode())
 
         for state in changed:
             if state['on_change'] is not None:
