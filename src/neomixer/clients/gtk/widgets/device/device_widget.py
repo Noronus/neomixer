@@ -284,6 +284,7 @@ class DeviceWidget(Gtk.Box):
         self.edit_button.add_controller(gesture)
 
     def _on_device_remove(self, _):
+        self.popover.popdown()
         self.emit('device_remove')
 
     def _on_volume_change(self, _, value):

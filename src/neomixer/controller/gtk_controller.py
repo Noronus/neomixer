@@ -266,6 +266,10 @@ class GtkController(SignalModel):
         self._close_eq_window(device_type, device_id)
         device_widget = self.content.device_box[device_type].remove_widget(device_id)
         self.content.routes_group.remove_widget(device_widget.routes_box)
+        # Removing is clicked in the strip's own popover. Disposed while open, GTK 4.8 keeps its
+        # popup surface and the compositor's grab, and no other popover opens anymore.
+        device_widget.popover.popdown()
+        device_widget.edit_button.set_popover(None)
         device_widget.run_dispose()
         self.content.relayout_sections()
 
