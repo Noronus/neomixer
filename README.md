@@ -78,7 +78,7 @@ Files: `~/.config/neomixer/config.json` and `~/.local/state/neomixer/neomixer.lo
 
 ## The phone app
 
-Switch it on in the settings menu, **Phone…**, and install `neomixer.apk` from the
+Switch it on in the settings menu, **Phone…**, and install `neomixer-*.apk` from the
 [latest release](https://github.com/Noronus/neomixer/releases/latest) on an Android phone (8 or newer) in the
 same network. The app finds the mixer by itself. The first time, NeoMixer asks on the PC if that phone may
 connect.
