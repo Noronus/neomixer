@@ -30,6 +30,7 @@ class SettingsMenuBox(Gtk.Box):
         "settings_change": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_PYOBJECT,)),
         "help_pressed": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
         "hotkeys_pressed": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
+        "phone_pressed": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
         "quit_pressed": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
     }
 
@@ -77,6 +78,11 @@ class SettingsMenuBox(Gtk.Box):
         self.hotkeys_button.set_tooltip_text(_('Mute and change the volume of any device with keys, from any program'))
         self.append(self.hotkeys_button)
         self.hotkeys_button.connect('clicked', lambda _: self.emit('hotkeys_pressed'))
+
+        self.phone_button = Gtk.Button(label=_('Phone…'))
+        self.phone_button.set_tooltip_text(_('Control the mixer from the Android app, and use the phone as an output and a microphone'))
+        self.append(self.phone_button)
+        self.phone_button.connect('clicked', lambda _: self.emit('phone_pressed'))
 
         self.help_button = Gtk.Button(label=_('Guide'))
         self.help_button.set_tooltip_text(_('Open the welcome guide'))

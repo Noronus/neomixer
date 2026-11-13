@@ -54,6 +54,7 @@ class Content(Gtk.Box):
         "settings_change": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_PYOBJECT,)),
         "help_pressed": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
         "hotkeys_pressed": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
+        "phone_pressed": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
         "quit_pressed": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
         "app_picked": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (str, str, str)),
         "apps_view_changed": (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
@@ -92,6 +93,7 @@ class Content(Gtk.Box):
         self.settings_box.connect('settings_change', self._on_settings_changed)
         self.settings_box.connect('help_pressed', self._on_help_pressed)
         self.settings_box.connect('hotkeys_pressed', self._on_hotkeys_pressed)
+        self.settings_box.connect('phone_pressed', self._on_phone_pressed)
         self.settings_box.connect('quit_pressed', self._on_quit_pressed)
 
         # Every strip lines its fader up with the others
@@ -291,6 +293,10 @@ class Content(Gtk.Box):
     def _on_hotkeys_pressed(self, _):
         self.settings_button.get_popover().popdown()
         self.emit('hotkeys_pressed')
+
+    def _on_phone_pressed(self, _):
+        self.settings_button.get_popover().popdown()
+        self.emit('phone_pressed')
 
     def _on_quit_pressed(self, _):
         self.emit('quit_pressed')

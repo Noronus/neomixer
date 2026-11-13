@@ -3,6 +3,7 @@ import logging
 from pydantic import BaseModel, root_validator
 from neomixer.model.device_model import DeviceModel
 from neomixer.model.known_app import KnownApp
+from neomixer.model.remote_model import RemotePhone
 from neomixer.model.connection_model import ConnectionModel
 
 LOG = logging.getLogger("generic")
@@ -36,6 +37,9 @@ class ConfigModel(BaseModel):
     window_width: int = 1500
     window_height: int = 860
     mixer_height: int = 0  # height of the mixer above the apps, 0 until the divider was moved
+    remote_enabled: bool = False  # let paired phones on the network control the mixer, see controller.remote_controller
+    remote_port: int = 47800  # TCP for the app, UDP to be found by it. The phone's microphone arrives on the next one.
+    remote_phones: dict[str, RemotePhone] = {}
 
     @root_validator(skip_on_failure=True)
     def heal_invariants(cls, values):

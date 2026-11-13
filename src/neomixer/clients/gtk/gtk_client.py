@@ -16,6 +16,7 @@ from neomixer.controller.app_registry import AppRegistry
 from neomixer.controller.device_controller import DeviceController
 from neomixer.controller.event_controller import EventController
 from neomixer.controller.hotkey_controller import HotkeyController
+from neomixer.controller.remote_controller import RemoteController
 from neomixer.clients.gtk import style
 from neomixer.clients.gtk.tray import TrayIcon
 
@@ -86,6 +87,7 @@ class GtkClient(Gtk.Application):
         self.gtk_controller = GtkController(device_repository=self.device_repository)
         self.app_registry = AppRegistry(device_repository=self.device_repository)
         self.hotkey_controller = HotkeyController(self.device_repository, self.gtk_controller.perform_hotkey)
+        self.remote_controller = RemoteController(self.device_repository, self.app_registry, self.gtk_controller)
         self.connect('shutdown', self.on_shutdown)
 
         quit_action = Gio.SimpleAction.new('quit', None)
@@ -140,6 +142,9 @@ class GtkClient(Gtk.Application):
         self.app_registry.bootstrap()
         self.event_controller.start_listen()
         self.hotkey_controller.start()
+        self.connect_remote_controller_events()
+        if self.config_model.remote_enabled:
+            self.remote_controller.start()
 
         try:
             self.tray = TrayIcon(self.gtk_controller.toggle_window, self.quit)
@@ -164,6 +169,8 @@ class GtkClient(Gtk.Application):
 
         self.gtk_controller.save_window_state()
         self.hotkey_controller.stop()
+        # Before the devices are cleaned up: a phone's audio is a process that has to go
+        self.remote_controller.stop()
         if self.config_model.cleanup is True:
             self.device_controller.cleanup()
 
@@ -217,6 +224,14 @@ class GtkClient(Gtk.Application):
 
         # Streams may be waiting for a device that just came back, runs after handle_hotplug
         self.gtk_controller.connect('pa_hotplug', lambda *_: self.app_registry.device_appeared())
+
+    def connect_remote_controller_events(self):
+        self.remote_controller.connect('pair_request', self.gtk_controller.ask_pairing)
+        self.remote_controller.connect('device_new', self.device_controller.create_device)
+        self.remote_controller.connect('changed', lambda: self.gtk_controller.remote_state_changed(self.remote_controller))
+        self.gtk_controller.connect('remote_probe', lambda: self.gtk_controller.remote_state_changed(self.remote_controller))
+        self.gtk_controller.connect('remote_enabled', self.remote_controller.set_enabled)
+        self.gtk_controller.connect('remote_forget', self.remote_controller.forget)
 
     def connect_device_controller_events(self):
         signal_map = {

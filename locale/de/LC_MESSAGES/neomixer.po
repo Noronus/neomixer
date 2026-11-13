@@ -818,3 +818,62 @@ msgstr "Im Einstellungsmenü legst du unter Hotkeys… Tasten fest, um jedes Ger
 #~ msgid "Application Inputs"
 #~ msgstr "Audioeingänge der Anwendung"
 
+msgid "Phone…"
+msgstr "Handy…"
+
+msgid "Control the mixer from the Android app, and use the phone as an output and a microphone"
+msgstr "Den Mixer mit der Android-App steuern, und das Handy als Ausgang und Mikrofon nutzen"
+
+msgid "Phone"
+msgstr "Handy"
+
+msgid "The NeoMixer app for Android controls this mixer from your phone. With its audio switched on, the phone is an output to route to, and its microphone an input."
+msgstr "Die NeoMixer-App für Android steuert diesen Mixer vom Handy aus. Mit eingeschaltetem Audio ist das Handy ein Ausgang, auf den sich routen lässt, und sein Mikrofon ein Eingang."
+
+msgid "Let phones on this network connect"
+msgstr "Handys in diesem Netzwerk verbinden lassen"
+
+msgid "ALLOWED PHONES"
+msgstr "ERLAUBTE HANDYS"
+
+msgid "A new phone asks here once before it is let in. Nothing is encrypted: use it on a network you trust."
+msgstr "Ein neues Handy fragt hier einmal nach, bevor es hereingelassen wird. Nichts ist verschlüsselt: nutze es in einem Netzwerk, dem du vertraust."
+
+msgid "Port %(port)s cannot be used: %(error)s"
+msgstr "Port %(port)s lässt sich nicht nutzen: %(error)s"
+
+msgid "The app finds this mixer by itself. If it does not, enter %s in the app."
+msgstr "Die App findet diesen Mixer von selbst. Falls nicht, gib in der App %s ein."
+
+msgid "Switched off, no phone can connect."
+msgstr "Ausgeschaltet, kein Handy kann sich verbinden."
+
+msgid "With a firewall on this machine, allow TCP and UDP ports %(first)s and %(second)s from your network."
+msgstr "Mit einer Firewall auf diesem Rechner: erlaube die TCP- und UDP-Ports %(first)s und %(second)s aus deinem Netzwerk."
+
+msgid "None yet. Open the app on your phone."
+msgstr "Noch keins. Öffne die App auf deinem Handy."
+
+msgid "connected"
+msgstr "verbunden"
+
+msgid "Forget"
+msgstr "Vergessen"
+
+msgid "This phone has to ask again before it can connect"
+msgstr "Dieses Handy muss erneut fragen, bevor es sich verbinden kann"
+
+msgid "A phone wants to connect"
+msgstr "Ein Handy möchte sich verbinden"
+
+msgid "<b>%(name)s</b> (%(address)s) wants to control NeoMixer, play through it and send its microphone."
+msgstr "<b>%(name)s</b> (%(address)s) möchte NeoMixer steuern, darüber abspielen und sein Mikrofon senden."
+
+msgid "Only allow it if that is your phone asking right now."
+msgstr "Erlaube es nur, wenn das gerade dein Handy ist, das fragt."
+
+msgid "Deny"
+msgstr "Ablehnen"
+
+msgid "Allow"
+msgstr "Erlauben"

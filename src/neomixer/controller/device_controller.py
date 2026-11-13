@@ -3,7 +3,7 @@ import logging
 import subprocess
 from dataclasses import dataclass
 
-from neomixer.scripts import pmctl, pw_eq
+from neomixer.scripts import pmctl, pw_eq, pw_phone
 from neomixer.model.device_model import DeviceModel
 from neomixer.model.signal_model import SignalModel
 from neomixer.model.connection_model import ConnectionModel, matched_by_order, pair_match, port_position, removed_pairs
@@ -107,7 +107,7 @@ class DeviceController(SignalModel):
         have changed while NeoMixer was not running: that one is read rather than set, a
         stale value could be painfully loud.
         '''
-        if device.device_class != 'virtual' or device.external:
+        if not DeviceController._is_ours(device):
             pa_device = pmctl.get_device_by_name(device.device_type, device.name)
             if pa_device is not None:
                 device.update_from_pa(pa_device)
@@ -117,6 +117,14 @@ class DeviceController(SignalModel):
         pmctl.mute(device.device_type, device.name, device.mute)
         if device.primary:
             pmctl.set_primary(device.device_type, device.name)
+
+    @staticmethod
+    def _is_ours(device):
+        '''
+        True for a device NeoMixer creates, which starts out at full volume every time. A phone's
+        devices are made anew whenever it connects, so they count although they are hardware strips.
+        '''
+        return (device.device_class == 'virtual' and not device.external) or device.name in pw_phone.NODE_NAMES
 
     def _try_init_device(self, device_type, device_id, log_msg, cache=True, wait=True):
         """
@@ -213,7 +221,7 @@ class DeviceController(SignalModel):
         port_type = 'output' if device.device_type == 'source' or device.get_type() == 'vi' else 'input'
         pmctl.wait_for_device_port(port_type, device.name)
 
-        if device.device_class == 'virtual' and not device.external:
+        if self._is_ours(device):
             self._restore_device_state(device)
 
         self._setup_eq(device)

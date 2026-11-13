@@ -27,6 +27,8 @@ Carneiro. It imports your Pulsemeeter config on first start.
 - **A layout that holds up.** Strips share the window width and programs flow into a grid of their
   own, however many there are the faders stay put and nothing scrolls sideways.
 - **Starts at login**, from a switch in the settings, and keeps running in the tray when closed.
+- **Your phone is a remote, a speaker and a microphone.** An Android app moves the faders, mutes and routes
+  from the couch. With its audio on, the phone is an output to route anything to, and its microphone an input.
 
 ![Equalizer](docs/neomixer-eq.png)
 
@@ -74,10 +76,37 @@ system volume, while the mixer is not in front: KDE's own OSD, a full bar is 0 d
 
 Files: `~/.config/neomixer/config.json` and `~/.local/state/neomixer/neomixer.log`.
 
+## The phone app
+
+Switch it on in the settings menu, **Phone…**, and install `neomixer.apk` from the
+[latest release](https://github.com/Noronus/neomixer/releases/latest) on an Android phone (8 or newer) in the
+same network. The app finds the mixer by itself. The first time, NeoMixer asks on the PC if that phone may
+connect.
+
+| | |
+|---|---|
+| Move a fader | Drag it, from anywhere on it: it moves by as much as your finger, and never jumps. Double tap for 0 dB |
+| Route an input | The **A1**, **B1**… buttons under its fader |
+| Hear the PC on the phone, and send its microphone | **Start audio**. **Listen** and **Microphone** under it switch each direction |
+| Choose what the phone plays | Route inputs to the output **Phone**, or pick it as a program's output |
+| Use the phone's microphone | **Phone Mic** is a hardware input: route it to a virtual output and pick that in the program |
+
+The two strips appear the first time a phone starts its audio and keep their routes, volume and EQ: after that
+the phone is like a headset that is plugged in while its audio is on. Audio keeps running with the phone's
+screen off, until you stop it in the app or from its notification.
+
+It needs PipeWire's RTP modules, which come with PipeWire on Arch, Fedora and Debian. With a firewall on the
+PC, allow TCP and UDP ports 47800 and 47801 from your network, with ufw:
+`sudo ufw allow from 192.168.0.0/16 to any port 47800:47801 proto tcp` and the same with `proto udp`.
+Nothing is encrypted, and a phone is only asked about once: use it on a network you trust.
+
+To build the app yourself: `android/build.sh`, with a JDK and the Android SDK's build-tools. No Gradle needed.
+
 ## How it works
 
 Virtual devices are PipeWire null sinks, and routes are links between their ports, which is why
-audio does not depend on the app running.
+audio does not depend on the app running. The phone's audio is plain PCM in RTP over UDP, sent and received by
+PipeWire's own RTP modules in a process of their own, which only runs while a phone has its audio on.
 
 A channel's EQ is a `libpipewire-module-filter-chain` in a process of its own, spliced between the
 device and its routes. Its nodes are passive, so an EQ never keeps a sound card awake. Parameters

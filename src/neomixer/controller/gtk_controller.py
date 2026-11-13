@@ -26,6 +26,8 @@ from neomixer.clients.gtk.widgets.app.app_dropdown import AppDropDown
 from neomixer.clients.gtk.widgets.eq.eq_window import EqWindow
 from neomixer.clients.gtk.widgets.welcome_window import WelcomeWindow
 from neomixer.clients.gtk.widgets.hotkey_window import HotkeyWindow
+from neomixer.clients.gtk.widgets.phone_window import PhoneWindow, PairWindow
+from neomixer.controller.remote_controller import local_address
 from neomixer.settings import APP_ID
 
 # pylint: disable=wrong-import-order,wrong-import-position
@@ -86,6 +88,12 @@ class GtkController(SignalModel):
             Emitted when hotkeys were changed, {(device_type, device_id, action): keys or None}.
         hotkeys_configure():
             Emitted when the desktop's own settings for the hotkeys should open.
+        remote_probe():
+            Emitted when the state of the server for the phone app needs to be known.
+        remote_enabled(state: bool):
+            Emitted when phones are let in, or no longer.
+        remote_forget(phone_id: str):
+            Emitted when a phone should have to ask again.
         quit():
             Emitted when the user asks to quit.
         pa_hotplug(device_type: str, device_id: str):
@@ -121,6 +129,7 @@ class GtkController(SignalModel):
         self.content = None
         self.welcome_window = None
         self.hotkey_window = None
+        self.phone_window = None
         self.osd = VolumeOsd()
         self.text_scaler = None
         self.status_label = None
@@ -514,6 +523,7 @@ class GtkController(SignalModel):
             'settings_change': self.settings_menu_apply,
             'help_pressed': self.open_welcome_window,
             'hotkeys_pressed': self.open_hotkey_window,
+            'phone_pressed': self.open_phone_window,
             'quit_pressed': self.quit_pressed,
             'app_picked': self.on_app_picked,
             'apps_view_changed': self.on_apps_view_changed,
@@ -612,6 +622,66 @@ class GtkController(SignalModel):
         if device.hotkey_osd and not self.mixer_in_front():
             self.osd.show(device.nick, widget.volume_widget.get_value(), widget.mute_widget.get_active(),
                           device.device_type == 'source')
+
+    #
+    # # Phone
+    #
+    def open_phone_window(self, *_):
+        if self.phone_window is None:
+            self.phone_window = PhoneWindow(transient_for=self.window)
+            self.phone_window.connect('enabled_changed', lambda _, state: self.emit('remote_enabled', state))
+            self.phone_window.connect('forget', lambda _, phone_id: self.emit('remote_forget', phone_id))
+            self.phone_window.connect('close-request', self._on_phone_window_close)
+            self.text_scaler.track(self.phone_window)
+        self.emit('remote_probe')
+        self.phone_window.present()
+
+    def _on_phone_window_close(self, window):
+        self.text_scaler.untrack(window)
+        self.phone_window = None
+        return False
+
+    def remote_state_changed(self, remote):
+        if self.phone_window is None:
+            return
+
+        phones = sorted(
+            ((phone_id, phone.name) for phone_id, phone in self.config_model.remote_phones.items()),
+            key=lambda phone: phone[1].lower()
+        )
+        self.phone_window.show_state(
+            enabled=self.config_model.remote_enabled, running=remote.running, error=remote.error,
+            address=local_address(), port=self.config_model.remote_port, phones=phones, connected=remote.connected_ids()
+        )
+
+    def ask_pairing(self, name, address, answer):
+        '''A phone nobody allowed yet asks to be. Shown also while the mixer's own window is hidden.'''
+        window = PairWindow(name, address, answer, application=self.window.get_application())
+        if self.window.get_visible():
+            window.set_transient_for(self.window)
+        self.text_scaler.track(window)
+        window.present()
+
+    def apply_volume(self, device_type, device_id, volume):
+        '''
+        What the phone app changes goes by way of the strip's own controls, as hotkeys do: it is
+        the same as using them here.
+        '''
+        widget = self.content.device_box[device_type].widgets[device_id]
+        widget.volume_widget.set_value(volume)
+
+    def apply_mute(self, device_type, device_id, state):
+        self.content.device_box[device_type].widgets[device_id].mute_widget.set_active(state)
+
+    def apply_route(self, input_type, input_id, output_type, output_id, state):
+        widget = self.content.device_box[input_type].widgets[input_id]
+        widget.connections_widgets[output_type].widgets[output_id].toggle_button.set_active(state)
+
+    def apply_app_volume(self, app_type, key, volume):
+        self.content.app_cards[(app_type, key)].volume_widget.set_value(volume)
+
+    def apply_app_mute(self, app_type, key, state):
+        self.content.app_cards[(app_type, key)].mute_widget.set_active(state)
 
     def connection_settings_hijack(self, device_widget, output_type, output_id, input_type, input_id):
         '''
