@@ -172,7 +172,9 @@ def test_a_write_in_the_same_moment_does_not_win(listener, devices, monkeypatch)
     with _default_is('steam'), mock.patch.object(pmctl_async, 'set_primary', mock.AsyncMock(return_value=True)) as restore:
         _run(listener, listener._handle_server_change_event(None))
         assert restore.await_count == 1
-        time.sleep(0.2)
+        # Between two checks, not on one: a check that runs while the patches change hands
+        # would meet the real sound server calls
+        time.sleep(0.17)
         # no event since, and it keeps trying as long as it is not back
         assert restore.await_count > 1
 
