@@ -119,6 +119,7 @@ def spectrum_and_clip(d):
                     '-ac', '2', '-ar', '48000', loud], check=True)
     quiet = d.play('Tone Test', binary='tonetest', freq=300)
     yield 1.0
+    _full_volume('Tone Test')
     select_device(d.card('tonetest'), 'inmedia')
     media = strip(d, 'vi', 'in media')
     yield 1.5
@@ -145,7 +146,9 @@ def spectrum_and_clip(d):
     player.command[-1] = loud
     player.stop()
     player.start()
-    yield 1.5
+    yield 0.8
+    _full_volume('Tone Test')
+    yield 1.0
     d.check(media.clip_led.lit, 'a clipping tone lights the clip LED')
     d.shot('clip', media)
     d.stop_players()
@@ -154,9 +157,11 @@ def spectrum_and_clip(d):
     yield 2.0
     d.check(not media.clip_led.lit, 'and then goes off by itself')
 
-    # The output is measured before its fader, the meter has to follow the fader anyway
+    # The meter has to follow the fader
     d.play('Tone Test', binary='tonetest', freq=300)
-    yield 1.5
+    yield 0.8
+    _full_volume('Tone Test')
+    yield 1.0
     full = media.vumeter_widget.level
     media.volume_widget.set_value(50)
     yield 1.5
@@ -206,6 +211,18 @@ def double_click_resets_fader(d):
     yield 0.3
     d.check(fader.get_value() == 70, 'a single click does not reset it')
     fader.set_value(100)
+
+
+def _full_volume(app_name):
+    '''
+    A program's stream at 100 %. A stream volume can be remembered by the sound server from an
+    earlier scenario (Debian's does), and the levels measured here have to be known.
+    '''
+    import json
+    import subprocess
+    for stream in json.loads(subprocess.check_output(['pactl', '-f', 'json', 'list', 'sink-inputs'], text=True)):
+        if stream['properties'].get('application.name') == app_name:
+            subprocess.run(['pactl', 'set-sink-input-volume', str(stream['index']), '100%'], check=False)
 
 
 def _recorders_in_sandbox():
