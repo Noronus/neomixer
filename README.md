@@ -18,6 +18,8 @@ Carneiro. It imports your Pulsemeeter config on first start.
   it belongs on comes back.
 - **Equalizer on every channel.** Eight parametric bands with a live curve, presets and a preamp, on
   inputs and outputs. Changes are inaudible to apply, and switching it off is instant, for comparing.
+- **A spectrum and a clip LED per channel.** A click on a channel's meter shows its spectrum in a
+  window of its own, which stays when the mixer is minimized. The LED over the meter lights at 0 dB.
 - **Text size that means something.** Set in points, it comes out the same physical size on every
   monitor, from the size each monitor reports, and follows the window when it moves to another.
 - **The default device stays yours.** A lock on a virtual strip holds it as the default: when
@@ -57,6 +59,8 @@ its window closes: start it again from the menu to get the window back.
 | Choose a program's output | The selector on its card. It is remembered |
 | Open a channel's EQ | **EQ** on its strip. Right click switches it on or off without opening it |
 | Edit the EQ | Drag a handle for frequency and gain, scroll for Q, double click to zero the gain |
+| See which frequencies are how loud | Click the meter next to a channel's fader |
+| Set a fader back to 0 dB | Double click it |
 | Make a device the system default | **★** on its strip |
 | Keep it the default, whatever other programs do | The lock on its strip |
 | Mute or change the volume with keys, from any program | Settings menu, **Hotkeys…**. Your desktop asks once to confirm new keys |
@@ -92,7 +96,7 @@ connect.
 | Use the phone's microphone | **Phone Mic** is a hardware input: route it to a virtual output and pick that in the program |
 
 The two strips appear the first time a phone starts its audio and keep their routes, volume and EQ: after that
-the phone is like a headset that is plugged in while its audio is on. Audio keeps running with the phone's
+the phone is like a headset that is plugged in while its audio is on. They leave when the last allowed phone is forgotten. Audio keeps running with the phone's
 screen off, until you stop it in the app or from its notification.
 
 It needs PipeWire's RTP modules, which come with PipeWire on Arch, Fedora and Debian. With a firewall on the
