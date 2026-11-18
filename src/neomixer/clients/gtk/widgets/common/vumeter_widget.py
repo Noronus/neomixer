@@ -1,3 +1,4 @@
+import gettext
 import math
 import time
 import logging
@@ -11,6 +12,7 @@ from gi.repository import Gtk, GLib  # noqa: E402
 # pylint: enable=wrong-import-order,wrong-import-position
 
 LOG = logging.getLogger("generic")
+_ = gettext.gettext
 
 DB_FLOOR = -50.0
 FALL_PER_SECOND = 0.9
@@ -20,6 +22,9 @@ FRAME_MS = 40
 REDRAW_THRESHOLD = 0.01
 SEGMENT = 3
 GAP = 1
+# A peak at -0.1 dBFS or more counts as clipped
+CLIP_PEAK = 0.989
+CLIP_HOLD_MS = 2000
 
 # Colors along the meter, from silence to full scale
 SEGMENT_COLORS = (
@@ -105,6 +110,9 @@ class VumeterWidget(Gtk.DrawingArea):
         self._drawn = (0.0, 0.0)
         self._strips = None
         self._strips_size = None
+        self.clip_led = None
+        # Applied to every peak: an output is measured before its fader, the meter shows after it
+        self.gain = 1.0
         self.set_draw_func(self._draw)
         self.connect('unrealize', self._on_unrealize)
 
@@ -134,7 +142,10 @@ class VumeterWidget(Gtk.DrawingArea):
 
     def advance(self, now, elapsed):
         '''Next frame of the meter. Returns False once it has gone dark.'''
-        fraction = peak_to_fraction(self._pending_peak)
+        peak = self._pending_peak * self.gain
+        fraction = peak_to_fraction(peak)
+        if peak >= CLIP_PEAK and self.clip_led is not None:
+            self.clip_led.trigger()
         self._pending_peak = 0.0
         self.level = max(fraction, self.level - FALL_PER_SECOND * elapsed)
         if fraction >= self.hold:
@@ -209,3 +220,49 @@ class VumeterWidget(Gtk.DrawingArea):
             cr.set_source_surface(lit, 0, 0)
             cr.paint()
             cr.restore()
+
+
+class ClipLed(Gtk.DrawingArea):
+    '''
+    Lights up red when the meter next to it clips, and goes off two seconds after the last
+    clip: a clip lasts a few milliseconds, it would be missed otherwise.
+    '''
+
+    def __init__(self, size=8, **kwargs):
+        super().__init__(content_width=size, content_height=size, **kwargs)
+        self.lit = False
+        self._off_source = None
+        self.add_css_class('clip-led')
+        self.set_tooltip_text(_('Clip: lights up when the level reaches 0 dB'))
+        self.set_draw_func(self._draw)
+        self.connect('unrealize', lambda *_: self.reset())
+
+    def trigger(self):
+        if self._off_source is not None:
+            GLib.source_remove(self._off_source)
+        self._off_source = GLib.timeout_add(CLIP_HOLD_MS, self._go_off)
+        if not self.lit:
+            self.lit = True
+            self.queue_draw()
+
+    def _go_off(self):
+        self._off_source = None
+        self.lit = False
+        self.queue_draw()
+        return GLib.SOURCE_REMOVE
+
+    def reset(self):
+        if self._off_source is not None:
+            GLib.source_remove(self._off_source)
+            self._off_source = None
+        if self.lit:
+            self.lit = False
+            self.queue_draw()
+
+    def _draw(self, _area, cr, width, height):
+        cr.rectangle(0, 0, width, height)
+        if self.lit:
+            cr.set_source_rgb(0.94, 0.27, 0.27)
+        else:
+            cr.set_source_rgba(0.94, 0.27, 0.27, 0.15)
+        cr.fill()

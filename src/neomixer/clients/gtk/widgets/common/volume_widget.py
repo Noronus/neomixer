@@ -21,6 +21,7 @@ class VolumeWidget(Gtk.Scale):
     def __init__(self, value: int = 100, *args, **kwargs):
         self.blocked: bool = False
         self.is_pressed: bool = False
+        self._reset_on_release: bool = False
         self.scroll_lock_timeout = None
         self._signal_handler_id = None
 
@@ -43,7 +44,7 @@ class VolumeWidget(Gtk.Scale):
                 _('Volume Slider')
             ]
         )
-        self.set_tooltip_text(_('Volume Slider'))
+        self.set_tooltip_text(_('Volume Slider, double click for 0 dB'))
 
         self._setup_gesture_controllers()
         self._signal_handler_id = self.connect('value-changed', self._on_value_changed)
@@ -82,13 +83,18 @@ class VolumeWidget(Gtk.Scale):
         # process the other events regularly
         return False
 
-    def _on_button_press(self, *_):
+    def _on_button_press(self, _gesture=None, n_press=1, *_):
         self.blocked = True
         self.is_pressed = True
+        self._reset_on_release = n_press == 2
 
     def _on_button_release(self, *_):
         self.blocked = False
         self.is_pressed = False
+        # On release: during the press the scale still moves the slider to the pointer
+        if self._reset_on_release:
+            self._reset_on_release = False
+            self.set_value(UNITY)
 
     def _clear_scroll_lock(self):
         self.blocked = False

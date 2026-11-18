@@ -115,6 +115,8 @@ SCENARIOS = (
     ('tray_is_on_the_bus', 0),
     ('quit_command', 0),
     ('demo_screenshot', 0),
+    ('spectrum_and_clip', 0),
+    ('double_click_resets_fader', 0),
 )
 
 

@@ -768,6 +768,17 @@ def get_device_by_name(device_type: str, device_name: str) -> PulseSinkInfo | Pu
         return None
 
 
+def metered_before_volume(device_name: str) -> bool:
+    '''
+    True for an output whose monitor carries the sound before the output's volume and mute,
+    PipeWire's default. NeoMixer's own outputs are made with monitor.channel-volumes=true.
+    '''
+    device = get_device_by_name('sink', device_name)
+    if device is None:
+        return False
+    return str(device.proplist.get('monitor.channel-volumes', 'false')).lower() != 'true'
+
+
 def get_device_by_index(device_type: str, device_index: str) -> PulseSinkInfo | PulseSourceInfo:
     '''
     Get a device object by type and name.

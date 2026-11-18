@@ -5,7 +5,7 @@ from neomixer.model.device_model import DeviceModel
 from neomixer.clients.gtk.widgets.common.volume_widget import VolumeWidget, format_db
 from neomixer.clients.gtk.widgets.common.mute_widget import MuteWidget
 from neomixer.clients.gtk.widgets.common.default_widget import DefaultWidget, HoldWidget
-from neomixer.clients.gtk.widgets.common.vumeter_widget import VumeterWidget
+from neomixer.clients.gtk.widgets.common.vumeter_widget import ClipLed, VumeterWidget
 from neomixer.clients.gtk.widgets.utils.widget_box import WidgetBox
 from neomixer.clients.gtk.widgets.device.connection_widget import ConnectionWidget
 from neomixer.clients.gtk.widgets.popovers.device_settings_popover import DeviceSettingsPopover
@@ -42,6 +42,7 @@ class DeviceWidget(Gtk.Box):
         'connection_settings_pressed': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (str, str)),
         'eq_pressed': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
         'eq_toggled': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
+        'spectrum_pressed': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
     }
 
     def __init__(self, model: DeviceModel, routes_group: Gtk.SizeGroup = None, tag: str = ''):
@@ -82,6 +83,11 @@ class DeviceWidget(Gtk.Box):
         self.value_label.add_css_class('strip-value')
         self.mute_widget = MuteWidget(active=model.mute, hexpand=True)
         self.vumeter_widget = VumeterWidget(vexpand=True)
+        self.vumeter_widget.set_tooltip_text(_('Click for the spectrum'))
+        self.vumeter_widget.set_cursor_from_name('pointer')
+        self.clip_led = ClipLed(halign=Gtk.Align.CENTER)
+        self.vumeter_widget.clip_led = self.clip_led
+        self.metered_before_fader = False
 
         self.edit_button = Gtk.MenuButton(icon_name='view-more-symbolic', valign=Gtk.Align.CENTER)
         self.edit_button.add_css_class('icon-small')
@@ -135,7 +141,10 @@ class DeviceWidget(Gtk.Box):
 
         # The fader carries the ticks, the meter sits right next to it
         fader_row = Gtk.Box(spacing=6, halign=Gtk.Align.CENTER, vexpand=True, margin_top=6, margin_bottom=2)
-        fader_row.append(self.vumeter_widget)
+        meter_column = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        meter_column.append(self.clip_led)
+        meter_column.append(self.vumeter_widget)
+        fader_row.append(meter_column)
         fader_row.append(self.volume_widget)
         self.append(fader_row)
         self.append(self.value_label)
@@ -280,6 +289,10 @@ class DeviceWidget(Gtk.Box):
         self.eq_button.add_controller(gesture)
 
         gesture = Gtk.GestureClick.new()
+        gesture.connect('released', lambda *_: self.emit('spectrum_pressed'))
+        self.vumeter_widget.add_controller(gesture)
+
+        gesture = Gtk.GestureClick.new()
         gesture.connect("pressed", self._on_edit_pressed)
         self.edit_button.add_controller(gesture)
 
@@ -287,8 +300,25 @@ class DeviceWidget(Gtk.Box):
         self.popover.popdown()
         self.emit('device_remove')
 
+    def update_meter_gain(self, volume=None, mute=None):
+        '''
+        A hardware output is metered before its fader (PipeWire's monitor of a sink), so the meter
+        scales the peaks by fader and mute itself. Everything else is metered after them already.
+        '''
+        if not self.metered_before_fader:
+            self.vumeter_widget.gain = 1.0
+            return
+        volume = self.device_model.volume[0] if volume is None else volume
+        mute = self.device_model.mute if mute is None else mute
+        self.vumeter_widget.gain = 0.0 if mute else (max(volume, 0) / 100) ** 3
+
+    def set_metered_before_fader(self, state):
+        self.metered_before_fader = state
+        self.update_meter_gain()
+
     def _on_volume_change(self, _, value):
         self.value_label.set_label(format_db(value))
+        self.update_meter_gain(volume=value)
         self.emit('volume', value)
 
     def _on_connection_change(self, _, state, output_type, output_id):
@@ -301,6 +331,7 @@ class DeviceWidget(Gtk.Box):
         self.emit('use_loopback', output_type, output_id, state)
 
     def _on_mute_change(self, _, state):
+        self.update_meter_gain(mute=state)
         self.emit('mute', state)
 
     def _on_primary_change(self, _):
@@ -351,6 +382,8 @@ class DeviceWidget(Gtk.Box):
         if self.volume_widget.get_volume() != volume:
             self.volume_widget.set_volume(volume)
             self.value_label.set_label(format_db(self.volume_widget.get_volume()))
+
+        self.update_meter_gain()
 
         if self.mute_widget.get_mute() != mute:
             self.mute_widget.set_mute(mute)

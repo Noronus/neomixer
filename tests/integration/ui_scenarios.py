@@ -108,6 +108,121 @@ def crowded(d):
 #
 # # Behaviour, these run one after the other in the same sandbox: see lifecycle_test.py
 #
+def spectrum_and_clip(d):
+    '''A tone too loud lights the clip LED, a click on the meter shows where it sits in the spectrum.'''
+    import os
+    import subprocess
+    from neomixer import settings
+    loud = os.path.join(settings.XDG_RUNTIME_DIR, 'tone-loud.wav')
+    subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=1000:duration=60,volume=12',
+                    '-ac', '2', '-ar', '48000', loud], check=True)
+    quiet = d.play('Firefox', binary='firefox', freq=300)
+    yield 1.0
+    select_device(d.card('firefox'), 'inmedia')
+    media = strip(d, 'vi', 'in media')
+    yield 1.5
+    d.check(not media.clip_led.lit, 'a quiet tone does not clip')
+
+    media.emit('spectrum_pressed')
+    yield 1.5
+    window = d.ui.spectrum_windows.get(('vi', '2'))
+    d.check(window is not None and window.get_visible(), 'a click on the meter opens the spectrum')
+    view = window.view
+    loudest = max(range(len(view.levels)), key=view.levels.__getitem__)
+    low, _, high = view.bands[loudest]
+    d.check(low <= 300 < high, f'the tone shows at 300 Hz (loudest band {low:.0f}-{high:.0f} Hz at {view.levels[loudest]:.1f} dB)')
+    d.shot('spectrum', window)
+
+    d.ui.hide_window()
+    yield 1.0
+    d.check(window.get_visible(), 'the spectrum stays when the mixer is hidden')
+    d.ui.show_window()
+    yield 0.5
+
+    quiet.stop()
+    player = d.play('Firefox', binary='firefox')
+    player.command[-1] = loud
+    player.stop()
+    player.start()
+    yield 1.5
+    d.check(media.clip_led.lit, 'a clipping tone lights the clip LED')
+    d.shot('clip', media)
+    d.stop_players()
+    yield 0.8
+    d.check(media.clip_led.lit, 'the clip LED stays lit a moment after the tone ends')
+    yield 2.0
+    d.check(not media.clip_led.lit, 'and then goes off by itself')
+
+    # The output is measured before its fader, the meter has to follow the fader anyway
+    d.play('Firefox', binary='firefox', freq=300)
+    yield 1.5
+    full = media.vumeter_widget.level
+    media.volume_widget.set_value(50)
+    yield 1.5
+    half = media.vumeter_widget.level
+    d.check(full > 0 and half < full - 0.2, f'the meter follows the fader down ({full:.2f} at 100 %, {half:.2f} at 50 %)')
+    media.mute_widget.set_active(True)
+    yield 1.5
+    d.check(media.vumeter_widget.level == 0, 'and goes dark when muted')
+    media.mute_widget.set_active(False)
+    media.volume_widget.set_value(100)
+    d.stop_players()
+
+    window.close()
+    yield 0.5
+    d.check(('vi', '2') not in d.ui.spectrum_windows, 'closing the spectrum forgets it')
+    d.check(not _recorders_in_sandbox(), 'and ends its recording')
+
+
+def double_click_resets_fader(d):
+    '''A double click on a fader puts it back to 0 dB, in the sound server too.'''
+    import json
+    import subprocess
+    yield 0.5
+    media = strip(d, 'vi', 'in media')
+    media.volume_widget.set_value(40)
+    yield 0.8
+
+    # what GTK's click gesture of the scale reports for a double click
+    fader = media.volume_widget
+    fader._on_button_press(None, 1, 0, 0)
+    fader._on_button_release(None, 1, 0, 0)
+    fader._on_button_press(None, 2, 0, 0)
+    fader.set_value(60)  # the scale moves the slider to the pointer while pressed
+    fader._on_button_release(None, 2, 0, 0)
+    yield 0.8
+
+    sinks = json.loads(subprocess.check_output(['pactl', '-f', 'json', 'list', 'sinks'], text=True))
+    volume = next(sink['volume'] for sink in sinks if sink['name'] == 'inmedia')
+    percents = {channel['value_percent'] for channel in volume.values()}
+    d.check(fader.get_value() == 100, 'the fader is back at 0 dB')
+    d.check(media.value_label.get_label() == '0.0 dB', f'and says so ({media.value_label.get_label()})')
+    d.check(percents == {'100%'}, f'and so is the device ({percents})')
+
+    fader._on_button_press(None, 1, 0, 0)
+    fader.set_value(70)
+    fader._on_button_release(None, 1, 0, 0)
+    yield 0.3
+    d.check(fader.get_value() == 70, 'a single click does not reset it')
+    fader.set_value(100)
+
+
+def _recorders_in_sandbox():
+    '''parec of a spectrum in this sandbox, not the ones of a NeoMixer on the desktop'''
+    import os
+    import subprocess
+    runtime = f'XDG_RUNTIME_DIR={os.environ["XDG_RUNTIME_DIR"]}'.encode()
+    found = []
+    for pid in subprocess.run(['pgrep', '-f', 'neomixer_spectrum_peak'], capture_output=True, text=True).stdout.split():
+        try:
+            with open(f'/proc/{pid}/environ', 'rb') as environ:
+                if runtime in environ.read().split(b'\0'):
+                    found.append(pid)
+        except OSError:
+            continue
+    return found
+
+
 def select_device(card, device_name):
     '''Choose a device in a program's selector, the way a click does.'''
     data = card.combobox._device_data[card.app_type]

@@ -24,6 +24,8 @@ from neomixer.clients.gtk.widgets.device.device_widget import DeviceWidget
 from neomixer.clients.gtk.widgets.app.app_widget import AppWidget
 from neomixer.clients.gtk.widgets.app.app_dropdown import AppDropDown
 from neomixer.clients.gtk.widgets.eq.eq_window import EqWindow
+from neomixer.clients.gtk.widgets.spectrum_window import SpectrumWindow
+from neomixer.utils.spectrum import monitor_name
 from neomixer.clients.gtk.widgets.welcome_window import WelcomeWindow
 from neomixer.clients.gtk.widgets.hotkey_window import HotkeyWindow
 from neomixer.clients.gtk.widgets.phone_window import PhoneWindow, PairWindow
@@ -137,6 +139,7 @@ class GtkController(SignalModel):
         self.app_meter_tasks = {}
         self.device_handlers = {'a': {}, 'b': {}, 'vi': {}, 'hi': {}}
         self.eq_windows = {}
+        self.spectrum_windows = {}
         self.eq_apply_sources = {}
         self.server_lost = False
 
@@ -273,6 +276,7 @@ class GtkController(SignalModel):
             "device" is the device widget to remove from the box
         '''
         self._close_eq_window(device_type, device_id)
+        self._close_spectrum_window(device_type, device_id)
         device_widget = self.content.device_box[device_type].remove_widget(device_id)
         self.content.routes_group.remove_widget(device_widget.routes_box)
         # Removing is clicked in the strip's own popover. Disposed while open, GTK 4.8 keeps its
@@ -437,6 +441,32 @@ class GtkController(SignalModel):
             self.eq_windows[(device_type, device_id)] = window
         window.present()
 
+    def open_spectrum_window(self, _, device_type, device_id):
+        key = (device_type, device_id)
+        window = self.spectrum_windows.get(key)
+        if window is None:
+            device_model = self.device_repository.get_device(device_type, device_id)
+            source = monitor_name(device_model.name, device_model.device_type)
+            meter = self.content.device_box[device_type].widgets[device_id].vumeter_widget
+            # No parent: it stays when the mixer is minimized or hidden to the tray
+            window = SpectrumWindow(device_model, source, meter=meter, application=self.window.get_application())
+            window.connect('close-request', lambda *_: self._forget_spectrum_window(key))
+            self.text_scaler.track(window, window.set_text_factor)
+            self.spectrum_windows[key] = window
+            window.start()
+        window.present()
+
+    def _forget_spectrum_window(self, key):
+        window = self.spectrum_windows.pop(key, None)
+        if window is not None:
+            self.text_scaler.untrack(window)
+        return False
+
+    def _close_spectrum_window(self, device_type, device_id):
+        window = self.spectrum_windows.get((device_type, device_id))
+        if window is not None:
+            window.close()
+
     def toggle_eq(self, _, device_type, device_id):
         device_model = self.device_repository.get_device(device_type, device_id)
         device_model.eq.enabled = not device_model.eq.enabled
@@ -505,6 +535,7 @@ class GtkController(SignalModel):
             'connection_settings_pressed': self.connection_settings_hijack,
             'eq_pressed': self.open_eq_window,
             'eq_toggled': self.toggle_eq,
+            'spectrum_pressed': self.open_spectrum_window,
         }
 
         device_handler = self.device_handlers[device_type][device_id] = {}
@@ -802,6 +833,9 @@ class GtkController(SignalModel):
         if device_widget is None:
             return
         pa_device_type = device_widget.device_model.device_type
+        device_widget.set_metered_before_fader(
+            pa_device_type == 'sink' and pmctl.metered_before_volume(device_widget.device_model.name)
+        )
         self.vumeter_tasks[device_type][device_id] = self.start_vumeter(
             pa_device_type, device_widget.device_model.name, device_widget.vumeter_widget
         )
