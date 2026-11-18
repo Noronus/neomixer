@@ -12,6 +12,8 @@ Unlike an EQ this process must not outlive NeoMixer: nothing else would ever sto
 '''
 import os
 import re
+import json
+import time
 import logging
 import signal
 import subprocess
@@ -32,6 +34,8 @@ PACKET_MS = 5
 # What the source keeps buffered against the jitter of a wireless network
 MIC_LATENCY_MS = 40
 PAYLOAD_TYPE = 127
+# Time for the session manager to take note of removed links before the sink goes
+DETACH_SETTLE_S = 0.25
 
 
 def config_path() -> str:
@@ -151,8 +155,59 @@ def running_pids() -> list[int]:
     return pids
 
 
+def routes_into_sink(objects: list[dict], sink_name: str = SINK_NAME) -> list[int]:
+    '''
+    The ids of the links into the phone's sink that NeoMixer made: from its devices (a route)
+    and from its route loopbacks. Links of programs that play to the phone directly are left.
+        "objects" is what pw-dump prints
+    '''
+    nodes = {
+        item['id']: (item.get('info') or {}).get('props') or {}
+        for item in objects if item.get('type') == 'PipeWire:Interface:Node'
+    }
+    sink_ids = {node_id for node_id, props in nodes.items() if props.get('node.name') == sink_name}
+    links = []
+    for item in objects:
+        if item.get('type') != 'PipeWire:Interface:Link':
+            continue
+        info = item.get('info') or {}
+        if info.get('input-node-id') not in sink_ids:
+            continue
+        props = nodes.get(info.get('output-node-id'), {})
+        is_program = str(props.get('media.class', '')).startswith('Stream/') and 'neomixer.target' not in props
+        if not is_program:
+            links.append(item['id'])
+    return links
+
+
+def detach_routes():
+    '''
+    Remove NeoMixer's routes into the phone's sink before the sink goes.
+
+    WirePlumber (0.5.19, linking.pause-playback) pauses every media player whose sound reached
+    a sink that is removed, also through other devices and routes: like a headset being pulled
+    out. Through a route that is every program on an input routed to the phone, which only
+    played there as well. Without the routes, only programs playing to the phone itself are
+    paused, as with a headset.
+    '''
+    try:
+        dump = subprocess.run(['pw-dump'], capture_output=True, text=True, timeout=5, check=True).stdout
+        link_ids = routes_into_sink(json.loads(dump))
+    except (OSError, subprocess.SubprocessError, ValueError) as error:
+        LOG.debug('Could not list the routes into the phone: %r', error)
+        return
+
+    for link_id in link_ids:
+        subprocess.run(['pw-cli', 'destroy', str(link_id)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    if link_ids:
+        time.sleep(DETACH_SETTLE_S)
+
+
 def stop(proc: subprocess.Popen | None = None):
     '''Stop every process running phone audio.'''
+    if (proc is not None and proc.poll() is None) or running_pids():
+        detach_routes()
+
     if proc is not None and proc.poll() is None:
         proc.terminate()
         try:
