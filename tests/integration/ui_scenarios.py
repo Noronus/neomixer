@@ -113,12 +113,13 @@ def spectrum_and_clip(d):
     import os
     import subprocess
     from neomixer import settings
+    # A program of its own: others in the suite had their volume changed, and that is remembered
     loud = os.path.join(settings.XDG_RUNTIME_DIR, 'tone-loud.wav')
     subprocess.run(['ffmpeg', '-y', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=1000:duration=60,volume=12',
                     '-ac', '2', '-ar', '48000', loud], check=True)
-    quiet = d.play('Firefox', binary='firefox', freq=300)
+    quiet = d.play('Tone Test', binary='tonetest', freq=300)
     yield 1.0
-    select_device(d.card('firefox'), 'inmedia')
+    select_device(d.card('tonetest'), 'inmedia')
     media = strip(d, 'vi', 'in media')
     yield 1.5
     d.check(not media.clip_led.lit, 'a quiet tone does not clip')
@@ -140,7 +141,7 @@ def spectrum_and_clip(d):
     yield 0.5
 
     quiet.stop()
-    player = d.play('Firefox', binary='firefox')
+    player = d.play('Tone Test', binary='tonetest')
     player.command[-1] = loud
     player.stop()
     player.start()
@@ -154,7 +155,7 @@ def spectrum_and_clip(d):
     d.check(not media.clip_led.lit, 'and then goes off by itself')
 
     # The output is measured before its fader, the meter has to follow the fader anyway
-    d.play('Firefox', binary='firefox', freq=300)
+    d.play('Tone Test', binary='tonetest', freq=300)
     yield 1.5
     full = media.vumeter_widget.level
     media.volume_widget.set_value(50)
