@@ -228,6 +228,7 @@ class GtkClient(Gtk.Application):
     def connect_remote_controller_events(self):
         self.remote_controller.connect('pair_request', self.gtk_controller.ask_pairing)
         self.remote_controller.connect('device_new', self.device_controller.create_device)
+        self.remote_controller.connect('device_remove', self.device_controller.remove_device)
         self.remote_controller.connect('changed', lambda: self.gtk_controller.remote_state_changed(self.remote_controller))
         self.gtk_controller.connect('remote_probe', lambda: self.gtk_controller.remote_state_changed(self.remote_controller))
         self.gtk_controller.connect('remote_enabled', self.remote_controller.set_enabled)

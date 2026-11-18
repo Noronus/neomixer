@@ -211,6 +211,19 @@ def test_a_forgotten_phone_is_dropped_and_has_to_ask_again(remote, config):
     assert [message['t'] for message in _say(remote, again, t='hello', id='known', name='Pixel')] == ['pair']
 
 
+def test_the_phone_strips_leave_with_the_last_phone_that_was_allowed(remote, config):
+    config.remote_phones['other'] = RemotePhone(name='Other', secret=SECRET)
+    config.devices['hi']['4'] = _device(pw_phone.SOURCE_NAME, 'source', 'hardware')
+    removed = []
+    remote.connect('device_remove', lambda *device: removed.append(device))
+
+    remote.forget('known')
+    assert not removed
+
+    remote.forget('other')
+    assert removed == [('a', '10'), ('hi', '4')]
+
+
 def test_garbage_is_ignored(remote):
     client = _welcomed(remote)
     for line in (b'', b'not json', b'[1, 2]', b'{"no": "kind"}', b'{"t": "volume"}', b'{"t": "volume", "type": "vi", "id": "1", "value": "loud"}'):

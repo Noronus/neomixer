@@ -110,6 +110,8 @@ class RemoteController(SignalModel):
             A phone that was never allowed asks to be. "answer" takes the decision.
         device_new(schema: dict):
             A device of the phone's is missing in the mixer and should be created.
+        device_remove(device_type: str, device_id: str):
+            No phone is allowed anymore, the phone's devices leave the mixer.
         changed():
             The list of paired or connected phones changed, or whether the server runs.
     '''
@@ -222,6 +224,8 @@ class RemoteController(SignalModel):
         for client in [client for client in self.clients if client.phone_id == phone_id]:
             self._send(client, {'t': 'denied'})
             self._drop(client)
+        if not self.config.remote_phones:
+            self._remove_devices()
         self.emit('changed')
 
     def connected_ids(self):
@@ -613,6 +617,16 @@ class RemoteController(SignalModel):
                 'volume': [100] * channels,
                 'mute': False,
             })
+
+    def _remove_devices(self):
+        '''
+        The strips are the phones' and cannot be removed by hand. They go with the last phone
+        that was allowed: no one is left who could play through them.
+        '''
+        for name, _nick, pa_type, _channels, _positions in PHONE_DEVICES:
+            bucket = 'a' if pa_type == 'sink' else 'hi'
+            for device_type, device_id, _device in self.device_repository.find_device_by_key('name', name, (bucket,)):
+                self.emit('device_remove', device_type, device_id)
 
     def _stop_audio(self):
         process, self.audio_process = self.audio_process, None

@@ -1,6 +1,7 @@
 import gettext
 
 from neomixer.model.device_model import DeviceModel
+from neomixer.scripts import pw_phone
 
 from neomixer.clients.gtk.widgets.common.volume_widget import VolumeWidget, format_db
 from neomixer.clients.gtk.widgets.common.mute_widget import MuteWidget
@@ -93,6 +94,9 @@ class DeviceWidget(Gtk.Box):
         self.edit_button.add_css_class('icon-small')
         self.popover = DeviceSettingsPopover(model.get_type(), edit=True)
         self.edit_button.set_popover(self.popover)
+        # A phone's two devices belong to the phones that were allowed, and leave with the last of them
+        if model.name in pw_phone.NODE_NAMES:
+            self.popover.remove_button.set_visible(False)
 
         self.primary_widget = DefaultWidget(active=bool(model.primary), hexpand=True)
         self.hold_widget = HoldWidget(active=model.hold_primary, hexpand=True)

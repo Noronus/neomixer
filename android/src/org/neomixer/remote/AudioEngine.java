@@ -240,6 +240,7 @@ final class AudioEngine {
         short[] out = new short[CHUNK * CHANNELS];
         float average = target;
         long lastLog = System.nanoTime();
+        float loudest = 0;
         try {
             while (running) {
                 int frames = take(taken, average);
@@ -251,6 +252,7 @@ final class AudioEngine {
                     stretch(taken, frames, out);
                 }
                 playLevel = peak(out, out.length);
+                loudest = Math.max(loudest, playLevel);
                 if (track.write(out, 0, out.length, AudioTrack.WRITE_BLOCKING) < 0) {
                     break;
                 }
@@ -258,7 +260,10 @@ final class AudioEngine {
                 long now = System.nanoTime();
                 if (now - lastLog > 10_000 * NANOS_PER_MS) {
                     lastLog = now;
-                    Log.i(TAG, "buffered " + bufferedMs + " ms, target " + target * 1000 / RATE + " ms, underruns " + underruns);
+                    // The level tells silence that was sent from sound that this phone does not play
+                    Log.i(TAG, "buffered " + bufferedMs + " ms, target " + target * 1000 / RATE + " ms, underruns " + underruns
+                            + ", loudest " + Math.round(loudest * 100) + " %");
+                    loudest = 0;
                 }
             }
         } finally {
