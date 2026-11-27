@@ -64,14 +64,39 @@ def signature(positions: list[str], eq, smart: bool = False) -> str:
 
 
 @functools.lru_cache(maxsize=1)
+def _loudness_plugin() -> str | None:
+    '''Path of PipeWire's EBU R 128 plugin, None without it.'''
+    dirs = [d for d in os.environ.get('SPA_PLUGIN_DIR', '').split(':') if d]
+    dirs += glob.glob('/usr/lib*/spa-0.2') + glob.glob('/usr/lib/*/spa-0.2') + glob.glob('/usr/local/lib*/spa-0.2')
+    for folder in dirs:
+        path = os.path.join(folder, 'filter-graph', 'libspa-filter-graph-plugin-ebur128.so')
+        if os.path.exists(path):
+            return path
+    return None
+
+
 def has_loudness_meter() -> bool:
     '''
     True when PipeWire has its EBU R 128 plugin, which loudness normalization needs. It came
     with PipeWire 1.4 and a distribution can leave it out.
     '''
-    dirs = [d for d in os.environ.get('SPA_PLUGIN_DIR', '').split(':') if d]
-    dirs += glob.glob('/usr/lib*/spa-0.2') + glob.glob('/usr/lib/*/spa-0.2') + glob.glob('/usr/local/lib*/spa-0.2')
-    return any(os.path.exists(os.path.join(d, 'filter-graph', 'libspa-filter-graph-plugin-ebur128.so')) for d in dirs)
+    return _loudness_plugin() is not None
+
+
+@functools.lru_cache(maxsize=1)
+def shortterm_port() -> str:
+    '''
+    The meter's port for the loudness of the last 3 seconds. PipeWire 1.4 (Debian 13) misspells
+    it, and a graph naming a port that is not there does not load at all.
+    '''
+    path = _loudness_plugin()
+    try:
+        with open(path, 'rb') as plugin:
+            if b'Shortterm LUFS' not in plugin.read():
+                return 'Shorttem LUFS'
+    except (OSError, TypeError):
+        pass
+    return 'Shortterm LUFS'
 
 
 def _stream_props(device_name: str, smart: bool) -> tuple[str, str]:
@@ -243,7 +268,7 @@ def _build_graph(positions: list[str], eq, loudness: bool, meter: bool = False) 
             if port is not None:
                 used.add(port)
                 graph.link(signal_, f'loud_meter:{port}')
-        graph.link('loud_meter:Shortterm LUFS', 'loud_target:LUFS')
+        graph.link(f'loud_meter:{shortterm_port()}', 'loud_target:LUFS')
         graph.link('loud_target:Gain', 'loud_clamp:Control')
         normalized = []
         for index, signal_ in enumerate(signals):

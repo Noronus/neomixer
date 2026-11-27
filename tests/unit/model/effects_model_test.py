@@ -165,3 +165,16 @@ def test_meter_summary_shows_the_most_each_effect_turned_down():
     assert summary['normalize'] == pytest.approx(6.02, abs=0.01)
     assert summary['compressor'] == pytest.approx(-12.04, abs=0.01)
     assert summary['limiter'] == 0
+
+
+def test_loudness_port_follows_the_name_the_plugin_has(tmp_path, monkeypatch):
+    '''PipeWire 1.4 calls it "Shorttem LUFS": a graph naming a port that is not there does not load'''
+    plugin = tmp_path / 'libspa-filter-graph-plugin-ebur128.so'
+    for name, expected in ((b'Shorttem LUFS', 'Shorttem LUFS'), (b'Shortterm LUFS', 'Shortterm LUFS')):
+        plugin.write_bytes(b'\0Momentary LUFS\0' + name + b'\0Global LUFS\0')
+        monkeypatch.setattr(pw_eq, '_loudness_plugin', lambda: str(plugin))
+        pw_eq.shortterm_port.cache_clear()
+        assert pw_eq.shortterm_port() == expected
+        config = pw_eq.build_config('x', ['FL', 'FR'], EqModel(), effects=EffectsModel())
+        assert f'{{ output = "loud_meter:{expected}" input = "loud_target:LUFS" }}' in config
+    pw_eq.shortterm_port.cache_clear()
