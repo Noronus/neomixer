@@ -33,6 +33,9 @@ LOG = logging.getLogger('generic')
 RATE = 1000  # the gains change slowly, the recording gets them resampled
 BLOCK = 50  # samples per report: 20 a second
 TAPS = pw_eq.METER_TAPS
+# The recording's channels, one per tap. PipeWire 1.4's pw-record refuses any --channel-map
+# with these 5 channels, and gives them these positions when there is none.
+RECORDER_CHANNELS = ('FL', 'FR', 'FC', 'SL', 'SR')
 PR_SET_PDEATHSIG = 1
 
 
@@ -221,13 +224,17 @@ class EffectsMeter:
                  f'stream.monitor = true application.name = "neomixer_fxmeter_peak" }}')
         self._recorder = _spawn(
             [pw_record, '--raw', '--format', 'f32', '--rate', str(RATE), '--channels', str(len(TAPS)),
-             '--channel-map', ','.join(f'AUX{index}' for index in range(len(TAPS))), '--latency', '50ms',
+             '--latency', '50ms',
              '-P', props, '-'],
             stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
         )
         self._thread = threading.Thread(target=self._read, args=(self._recorder,), name='fxmeter', daemon=True)
         self._thread.start()
-        return _wait_ports(recorder_name(self.device_name), 'input', len(TAPS))
+        if not _wait_ports(recorder_name(self.device_name), 'input', len(TAPS)):
+            LOG.warning('The effects meter of %s could not record', self.device_name)
+            self.stop()
+            return False
+        return True
 
     def _link(self):
         '''Link what goes into the chain to the meter, and the meter to its recording, unless they are.'''
@@ -242,8 +249,11 @@ class EffectsMeter:
             for source, target in zip(monitors, pmctl.get_ports('input', capture)):
                 pmctl.link(f'{chain}:{source}', f'{capture}:{target}', True)
             recorder = recorder_name(self.device_name)
-            for source, target in zip(pmctl.get_ports('output', playback), pmctl.get_ports('input', recorder)):
-                pmctl.link(f'{playback}:{source}', f'{recorder}:{target}', True)
+            inputs = pmctl.get_ports('input', recorder)
+            for index, source in enumerate(pmctl.get_ports('output', playback)):
+                target = next((port for port in inputs if port.endswith(f'_{RECORDER_CHANNELS[index]}')), None)
+                if target is not None:
+                    pmctl.link(f'{playback}:{source}', f'{recorder}:{target}', True)
         except RuntimeError:
             LOG.debug('Could not link the effects meter of %s', self.device_name)
 
