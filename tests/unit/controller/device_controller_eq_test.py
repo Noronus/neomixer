@@ -101,6 +101,27 @@ class EqControllerTest(unittest.TestCase):
         self.start.assert_not_called()
         self.link.assert_not_called()
 
+    def test_an_effect_alone_starts_the_filter_chain(self):
+        self.music.effects.limiter.enabled = True
+        self.controller.set_eq('vi', '1')
+        self.start.assert_called_once()
+        self.assertIs(self.start.call_args.args[4], self.music.effects)
+
+    def test_bypass_starts_nothing(self):
+        self.music.effects.limiter.enabled = True
+        self.music.effects.bypass = True
+        self.controller.set_eq('vi', '1')
+        self.start.assert_not_called()
+
+    def test_bypass_of_a_running_chain_keeps_it_running(self):
+        self.music.effects.compressor.enabled = True
+        self.controller.set_eq('vi', '1')
+        self.stop.reset_mock()
+        self.music.effects.bypass = True
+        self.controller.set_eq('vi', '1')
+        self.set_params.assert_called_once()
+        self.stop.assert_not_called()
+
     def test_changing_a_running_eq_does_not_touch_the_routes(self):
         self.music.eq.enabled = True
         self.controller.set_eq('vi', '1')
@@ -109,7 +130,7 @@ class EqControllerTest(unittest.TestCase):
 
         self.music.eq.bands[3].gain = 6
         self.controller.set_eq('vi', '1')
-        self.set_params.assert_called_once_with('music', self.music.eq)
+        self.set_params.assert_called_once_with('music', ['FL', 'FR'], self.music.eq, self.music.effects)
         self.start.assert_not_called()
         self.link.assert_not_called()
 
@@ -183,7 +204,7 @@ class EqControllerTest(unittest.TestCase):
     def test_hardware_output_gets_a_smart_filter(self):
         self.headset.eq.enabled = True
         self.controller.set_eq('a', '1')
-        self.start.assert_called_once_with('headset', ['FL', 'FR'], self.headset.eq, True)
+        self.start.assert_called_once_with('headset', ['FL', 'FR'], self.headset.eq, True, self.headset.effects)
 
         # the routes play into it, and the session manager links it to the device
         links = self.links()
@@ -201,7 +222,7 @@ class EqControllerTest(unittest.TestCase):
         self.music.connections['b']['1'].state = True
         self.bus.eq.enabled = True
         self.controller.set_eq('b', '1')
-        self.start.assert_called_once_with('bus', ['MONO'], self.bus.eq, False)
+        self.start.assert_called_once_with('bus', ['MONO'], self.bus.eq, False, self.bus.effects)
         self.wait_linked.assert_not_called()
         links = self.links()
         self.assertIn(('output.nm_eq_bus:output_MONO', 'bus:input_MONO', True), links)

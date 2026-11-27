@@ -18,8 +18,12 @@ Carneiro. It imports your Pulsemeeter config on first start.
   it belongs on comes back.
 - **Equalizer on every channel.** Eight parametric bands with a live curve, presets and a preamp, on
   inputs and outputs. Changes are inaudible to apply, and switching it off is instant, for comparing.
+- **Effects on every channel.** Loudness normalization (EBU R 128) that keeps films at about the same
+  volume, a compressor, a de-esser, a limiter and a noise gate, next to the EQ behind the **FX**
+  button. Presets for movies, voice and music; each effect switches on and off instantly.
 - **A spectrum and a clip LED per channel.** A click on a channel's meter shows its spectrum in a
-  window of its own, which stays when the mixer is minimized. The LED over the meter lights at 0 dB.
+  window of its own, which stays when the mixer is minimized. Under it, what the EQ and each effect
+  do to the sound right now. The LED over the meter lights at 0 dB.
 - **Text size that means something.** Set in points, it comes out the same physical size on every
   monitor, from the size each monitor reports, and follows the window when it moves to another.
 - **The default device stays yours.** A lock on a virtual strip holds it as the default: when
@@ -32,7 +36,7 @@ Carneiro. It imports your Pulsemeeter config on first start.
 - **Your phone is a remote, a speaker and a microphone.** An Android app moves the faders, mutes and routes
   from the couch. With its audio on, the phone is an output to route anything to, and its microphone an input.
 
-![Equalizer](docs/neomixer-eq.png)
+![Effects](docs/neomixer-eq.png)
 
 ## Install
 
@@ -57,9 +61,10 @@ its window closes: start it again from the menu to get the window back.
 |---|---|
 | Route an input to an output | Click **A1**, **B1**… on its strip. Right click for channel mapping and a per-route volume |
 | Choose a program's output | The selector on its card. It is remembered |
-| Open a channel's EQ | **EQ** on its strip. Right click switches it on or off without opening it |
+| Open a channel's EQ and effects | **FX** on its strip. Right click switches all of them off or on without opening it |
+| Keep a film at about the same volume | **FX**, then the **Movie** preset: normalization, compressor and limiter |
 | Edit the EQ | Drag a handle for frequency and gain, scroll for Q, double click to zero the gain |
-| See which frequencies are how loud | Click the meter next to a channel's fader |
+| See which frequencies are how loud, and what the effects do right now | Click the meter next to a channel's fader |
 | Set a fader back to 0 dB | Double click it |
 | Make a device the system default | **★** on its strip |
 | Keep it the default, whatever other programs do | The lock on its strip |
@@ -68,7 +73,7 @@ its window closes: start it again from the menu to get the window back.
 | Quit for real | Settings menu, or the tray icon's menu, or `neomixer quit` |
 
 Closing the window keeps NeoMixer running, since new streams only reach their remembered output
-while it runs. Routes and the EQ also keep playing after you quit, until you log out.
+while it runs. Routes and effects also keep playing after you quit, until you log out.
 
 Hotkeys go through the desktop's global shortcuts portal, the one way a program gets keys on Wayland:
 KDE and GNOME have it. Holding a volume key keeps going up to 0 dB, past that takes a press each. A press
@@ -117,6 +122,14 @@ device and its routes. Its nodes are passive, so an EQ never keeps a sound card 
 change through `pw-cli set-param` without touching the audio; only a new filter type rebuilds the
 chain. Programs can also play straight into a hardware output, or follow it as the default device.
 That EQ is a WirePlumber smart filter, which takes every stream headed for the device.
+
+The effects run in the same filter chain, built from PipeWire's builtin filters: a detector squares
+each channel, takes the loudest, smooths it with a lowpass and turns that into a gain with `log`,
+`linear`, `clamp` and `exp`, applied to all channels alike so the stereo image stays put.
+Normalization measures with PipeWire's `ebur128` plugin (PipeWire 1.4 and newer) over 3 seconds.
+Effects that are off stay in the chain with a gain of 0 dB, so switching one is instant. PipeWire reports
+a filter's settings but not what flows through it, so while a spectrum window is open, a second
+copy of the chain runs on the same input with the gains as its outputs, recorded with `pw-record`.
 
 Programs are identified by what survives updates: the Flatpak id or process name, not the stream
 name, which is `Factorio 2.1.24` today and `WEBRTC VoiceEngine` for half the internet. A stream's

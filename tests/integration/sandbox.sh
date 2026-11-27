@@ -28,7 +28,7 @@ start_audio() {
 
 stop_eqs() {
     for proc in /proc/[0-9]*; do
-        if tr '\0' ' ' <"$proc/cmdline" 2>/dev/null | grep -qF "$SB/run/neomixer/eq-"; then
+        if tr '\0' ' ' <"$proc/cmdline" 2>/dev/null | grep -qE "$SB/run/neomixer/(eq|fxmeter)-"; then
             kill "${proc#/proc/}" 2>/dev/null
         fi
     done

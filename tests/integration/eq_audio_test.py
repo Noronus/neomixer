@@ -89,16 +89,16 @@ class EqAudioTest(unittest.TestCase):
         self.assertAlmostEqual(measure_db(SOURCE, TARGET, 1000), 0, delta=0.2)
 
         eq.bands[0].gain = 12
-        self.assertTrue(pw_eq.set_params(SOURCE, eq))
+        self.assertTrue(pw_eq.set_params(SOURCE, ['FL', 'FR'], eq))
         self.assertAlmostEqual(measure_db(SOURCE, TARGET, 1000), 12, delta=0.2)
 
         eq.bands[0].freq = 4000
-        self.assertTrue(pw_eq.set_params(SOURCE, eq))
+        self.assertTrue(pw_eq.set_params(SOURCE, ['FL', 'FR'], eq))
         self.assert_matches_curve(eq, 1000)
         self.assert_matches_curve(eq, 4000)
 
         eq.preamp = -6
-        self.assertTrue(pw_eq.set_params(SOURCE, eq))
+        self.assertTrue(pw_eq.set_params(SOURCE, ['FL', 'FR'], eq))
         self.assert_matches_curve(eq, 4000)
 
         self.assertEqual(pw_eq.running_pids(SOURCE), [pid])
@@ -117,7 +117,7 @@ class EqAudioTest(unittest.TestCase):
         self.assertLess(measure_db(SOURCE, TARGET, 1000) or -120, -6)
 
         eq.enabled = False
-        self.assertTrue(pw_eq.set_params(SOURCE, eq))
+        self.assertTrue(pw_eq.set_params(SOURCE, ['FL', 'FR'], eq))
         for freq in (100, 1000, 10000):
             self.assertAlmostEqual(measure_db(SOURCE, TARGET, freq), 0, delta=0.2, msg=f'{freq} Hz')
 

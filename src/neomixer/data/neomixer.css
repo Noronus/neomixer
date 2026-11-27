@@ -214,3 +214,14 @@ button.eq-chip {
 button.eq-chip:checked { background-color: @nm_strip_high; color: @nm_text; border-color: @nm_eq; }
 button.eq-chip.eq-chip-off { color: @nm_faint; }
 .eq-window-off .eq-chip { opacity: 0.7; }
+
+/* Effects window */
+list.fx-sidebar { background-color: @nm_panel; min-width: 210px; }
+list.fx-sidebar row { padding: 0; }
+list.fx-sidebar row:selected { background-color: @nm_strip_high; }
+.fx-row { padding: 10px 12px; }
+.fx-page { padding: 18px 22px; }
+.fx-title { font-weight: 700; font-size: 1.15em; color: @nm_text; }
+.fx-description { color: @nm_dim; }
+.fx-missing { color: @nm_eq; }
+window.fx-bypassed list.fx-sidebar switch, window.fx-bypassed .fx-page scale { opacity: 0.55; }

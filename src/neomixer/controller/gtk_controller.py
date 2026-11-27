@@ -23,7 +23,8 @@ from neomixer.clients.gtk.widgets.common.volume_widget import snap_to_unity
 from neomixer.clients.gtk.widgets.device.device_widget import DeviceWidget
 from neomixer.clients.gtk.widgets.app.app_widget import AppWidget
 from neomixer.clients.gtk.widgets.app.app_dropdown import AppDropDown
-from neomixer.clients.gtk.widgets.eq.eq_window import EqWindow
+from neomixer.clients.gtk.widgets.eq.effects_window import EffectsWindow
+from neomixer.scripts import pw_eq
 from neomixer.clients.gtk.widgets.spectrum_window import SpectrumWindow
 from neomixer.utils.spectrum import monitor_name
 from neomixer.clients.gtk.widgets.welcome_window import WelcomeWindow
@@ -73,7 +74,7 @@ class GtkController(SignalModel):
         device_change(schema, device_type: str, device_id: str):
             Emitted when a device's settings are updated.
         eq_change(device_type: str, device_id: str):
-            Emitted when a device's EQ settings changed.
+            Emitted when a device's EQ or effects settings changed.
         app_volume(app_type: str, key: str, volume: int):
             Emitted when a program's volume is changed.
         app_mute(app_type: str, key: str, state: bool):
@@ -138,7 +139,7 @@ class GtkController(SignalModel):
         self.vumeter_tasks = {'a': {}, 'b': {}, 'vi': {}, 'hi': {}}
         self.app_meter_tasks = {}
         self.device_handlers = {'a': {}, 'b': {}, 'vi': {}, 'hi': {}}
-        self.eq_windows = {}
+        self.effects_windows = {}
         self.spectrum_windows = {}
         self.eq_apply_sources = {}
         self.server_lost = False
@@ -202,8 +203,8 @@ class GtkController(SignalModel):
     def hide_window(self):
         self.save_window_state()
         self.window.set_visible(False)
-        for eq_window in self.eq_windows.values():
-            eq_window.set_visible(False)
+        for effects_window in self.effects_windows.values():
+            effects_window.set_visible(False)
         self.stop_all_vumeters()
 
     def toggle_window(self):
@@ -275,7 +276,7 @@ class GtkController(SignalModel):
             "device_type" is [vi, hi, a, b]
             "device" is the device widget to remove from the box
         '''
-        self._close_eq_window(device_type, device_id)
+        self._close_effects_window(device_type, device_id)
         self._close_spectrum_window(device_type, device_id)
         device_widget = self.content.device_box[device_type].remove_widget(device_id)
         self.content.routes_group.remove_widget(device_widget.routes_box)
@@ -428,17 +429,17 @@ class GtkController(SignalModel):
         self.emit('quit')
 
     #
-    # # EQ
+    # # EQ and effects
     #
-    def open_eq_window(self, _, device_type, device_id):
-        window = self.eq_windows.get((device_type, device_id))
+    def open_effects_window(self, _, device_type, device_id):
+        window = self.effects_windows.get((device_type, device_id))
         if window is None:
             device_model = self.device_repository.get_device(device_type, device_id)
-            window = EqWindow(device_model, transient_for=self.window)
+            window = EffectsWindow(device_model, pw_eq.has_loudness_meter(), transient_for=self.window)
             window.set_hide_on_close(True)
-            window.connect('changed', self._on_eq_window_changed, device_type, device_id)
+            window.connect('changed', self._on_effects_changed, device_type, device_id)
             self.text_scaler.track(window, window.set_text_factor)
-            self.eq_windows[(device_type, device_id)] = window
+            self.effects_windows[(device_type, device_id)] = window
         window.present()
 
     def open_spectrum_window(self, _, device_type, device_id):
@@ -467,18 +468,28 @@ class GtkController(SignalModel):
         if window is not None:
             window.close()
 
-    def toggle_eq(self, _, device_type, device_id):
+    def toggle_effects(self, _, device_type, device_id):
+        '''
+        Switch all effects of a device off or on again, keeping which ones are on. With none
+        on yet there is nothing to switch, the window shows what there is.
+        '''
         device_model = self.device_repository.get_device(device_type, device_id)
-        device_model.eq.enabled = not device_model.eq.enabled
-        window = self.eq_windows.get((device_type, device_id))
+        if not device_model.eq.enabled and not device_model.effects.enabled_names():
+            self.open_effects_window(None, device_type, device_id)
+            return
+        device_model.effects.bypass = not device_model.effects.bypass
+        window = self.effects_windows.get((device_type, device_id))
         if window is not None:
             window.refresh()
-        self._on_eq_window_changed(None, device_type, device_id)
+        self._on_effects_changed(None, device_type, device_id)
 
-    def _on_eq_window_changed(self, _, device_type, device_id):
+    def _on_effects_changed(self, _, device_type, device_id):
         widget = self.content.device_box[device_type].widgets.get(device_id)
         if widget is not None:
-            widget.update_eq_state()
+            widget.update_effects_state()
+        spectrum = self.spectrum_windows.get((device_type, device_id))
+        if spectrum is not None:
+            spectrum.effects_changed()
 
         # A drag changes the EQ on every pointer event, that many updates would only pile up
         key = (device_type, device_id)
@@ -493,8 +504,8 @@ class GtkController(SignalModel):
             LOG.exception('Failed to apply the EQ of %s/%s', device_type, device_id)
         return GLib.SOURCE_REMOVE
 
-    def _close_eq_window(self, device_type, device_id):
-        window = self.eq_windows.pop((device_type, device_id), None)
+    def _close_effects_window(self, device_type, device_id):
+        window = self.effects_windows.pop((device_type, device_id), None)
         if window is not None:
             self.text_scaler.untrack(window)
             window.destroy()
@@ -533,8 +544,8 @@ class GtkController(SignalModel):
             'destroy': self.on_device_widget_destroy,
             'settings_pressed': self.add_device_hijack,
             'connection_settings_pressed': self.connection_settings_hijack,
-            'eq_pressed': self.open_eq_window,
-            'eq_toggled': self.toggle_eq,
+            'effects_pressed': self.open_effects_window,
+            'effects_toggled': self.toggle_effects,
             'spectrum_pressed': self.open_spectrum_window,
         }
 

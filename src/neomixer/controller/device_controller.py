@@ -679,22 +679,27 @@ class DeviceController(SignalModel):
         capture = pw_eq.eq_nodes(output_device.name)[0]
         return capture, pmctl.get_ports('input', capture)
 
+    @staticmethod
+    def _wants_eq(device):
+        '''True when the EQ or one of the effects has something to do, see pw_eq.'''
+        return (device.eq.enabled or bool(device.effects.enabled_names())) and not device.effects.bypass
+
     def set_eq(self, device_type, device_id):
         '''
-        Bring the running audio in line with a device's EQ settings. Most changes reach the
-        running filters without a sound. Starting the EQ, or changing a band's filter type,
-        has to rebuild it and relink the routes, which leaves a short gap in the audio.
+        Bring the running audio in line with a device's EQ and effects settings. Most changes
+        reach the running filters without a sound. Starting the EQ, or changing a band's filter
+        type, has to rebuild it and relink the routes, which leaves a short gap in the audio.
         '''
         device = self.device_repository.get_device(device_type, device_id)
         running = self._running_eqs.get(device.name)
 
         if running is None:
-            if device.eq.enabled:
+            if self._wants_eq(device):
                 self._insert_eq(device_type, device_id, device)
             return
 
         if pw_eq.signature(running.positions, device.eq, self._uses_smart_filter(device)) == running.signature:
-            pw_eq.set_params(device.name, device.eq)
+            pw_eq.set_params(device.name, running.positions, device.eq, device.effects)
             return
 
         self._unlink_routes(device_type, device_id, device)
@@ -743,7 +748,7 @@ class DeviceController(SignalModel):
                 return
             self._stop_eq(device)
 
-        if device.eq.enabled:
+        if self._wants_eq(device):
             self._start_eq(device)
         else:
             # one left from an earlier run, whose EQ was switched off since
@@ -765,10 +770,10 @@ class DeviceController(SignalModel):
         process = None
         adopted = pw_eq.running_signature(device.name) == signature and pw_eq.wait_ready(device.name, len(ports), timeout=0.2)
         if adopted:
-            pw_eq.set_params(device.name, device.eq)
+            pw_eq.set_params(device.name, positions, device.eq, device.effects)
         else:
             pw_eq.stop(device.name)
-            process = pw_eq.start(device.name, positions, device.eq, smart)
+            process = pw_eq.start(device.name, positions, device.eq, smart, device.effects)
             if not pw_eq.wait_ready(device.name, len(ports)):
                 LOG.error('The EQ of %s did not start', device.name)
                 pw_eq.stop(device.name, process)

@@ -41,8 +41,8 @@ class DeviceWidget(Gtk.Box):
         'update_connection': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (str, str, GObject.TYPE_PYOBJECT)),
         'settings_pressed': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (GObject.TYPE_PYOBJECT,)),
         'connection_settings_pressed': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, (str, str)),
-        'eq_pressed': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
-        'eq_toggled': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
+        'effects_pressed': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
+        'effects_toggled': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
         'spectrum_pressed': (GObject.SIGNAL_RUN_FIRST, GObject.TYPE_NONE, ()),
     }
 
@@ -58,7 +58,7 @@ class DeviceWidget(Gtk.Box):
         self._arrange_widgets()
         self._connect_callbacks()
         self._update_warning()
-        self.update_eq_state()
+        self.update_effects_state()
 
     def _create_widgets(self, model, tag):
         self.tag_label = Gtk.Label(label=tag, visible=bool(tag))
@@ -101,9 +101,10 @@ class DeviceWidget(Gtk.Box):
         self.primary_widget = DefaultWidget(active=bool(model.primary), hexpand=True)
         self.hold_widget = HoldWidget(active=model.hold_primary, hexpand=True)
 
-        self.eq_button = Gtk.Button(label=_('EQ'), hexpand=True)
-        self.eq_button.add_css_class('strip-button')
-        self.eq_button.add_css_class('eq-button')
+        self.effects_button = Gtk.Button(label=_('FX'), hexpand=True)
+        self.effects_button.add_css_class('strip-button')
+        self.effects_button.add_css_class('eq-button')
+        Gtk.Accessible.update_property(self.effects_button, [Gtk.AccessibleProperty.LABEL], [_('Effects')])
 
         self.connections_widgets = {}
         if self.device_type in ('vi', 'hi'):
@@ -156,7 +157,7 @@ class DeviceWidget(Gtk.Box):
         # Not homogeneous: the widest of four buttons would decide how narrow a strip can get
         buttons = Gtk.Box(spacing=3, margin_top=4)
         buttons.append(self.mute_widget)
-        buttons.append(self.eq_button)
+        buttons.append(self.effects_button)
         if self.device_model.primary is not None:
             buttons.append(self.primary_widget)
             buttons.append(self.hold_widget)
@@ -203,21 +204,37 @@ class DeviceWidget(Gtk.Box):
         self.tag_label.set_label(tag)
         self.tag_label.set_visible(bool(tag))
 
-    def update_eq_state(self):
-        '''Lit while the EQ is doing something, outlined when it is set up but switched off.'''
-        eq = self.device_model.eq
-        if eq.enabled:
-            self.eq_button.add_css_class('eq-on')
-        else:
-            self.eq_button.remove_css_class('eq-on')
+    def effects_in_use(self):
+        '''Names of the EQ and the effects that are switched on, whether or not all are bypassed.'''
+        names = {
+            'gate': _('Noise gate'), 'normalize': _('Normalization'), 'compressor': _('Compressor'),
+            'deesser': _('De-esser'), 'limiter': _('Limiter'),
+        }
+        used = [_('EQ')] if self.device_model.eq.enabled else []
+        return used + [names[name] for name in self.device_model.effects.enabled_names()]
 
-        if not eq.enabled and not eq.is_flat():
-            self.eq_button.add_css_class('eq-curved')
+    def update_effects_state(self):
+        '''Lit while an effect is doing something, outlined when some are set up but switched off.'''
+        used = self.effects_in_use()
+        bypass = self.device_model.effects.bypass
+        active = bool(used) and not bypass
+        if active:
+            self.effects_button.add_css_class('eq-on')
         else:
-            self.eq_button.remove_css_class('eq-curved')
+            self.effects_button.remove_css_class('eq-on')
 
-        state = _('on') if eq.enabled else _('off')
-        self.eq_button.set_tooltip_text(_('Equalizer (%s). Right click switches it on or off.') % state)
+        if not active and (used or not self.device_model.eq.is_flat()):
+            self.effects_button.add_css_class('eq-curved')
+        else:
+            self.effects_button.remove_css_class('eq-curved')
+
+        if active:
+            tooltip = _('Effects on: %s. Right click switches them all off.') % ', '.join(used)
+        elif used:
+            tooltip = _('Effects switched off: %s. Right click switches them on again.') % ', '.join(used)
+        else:
+            tooltip = _('Effects: EQ, normalization, compressor, de-esser, limiter and noise gate')
+        self.effects_button.set_tooltip_text(tooltip)
 
     def _update_warning(self):
         '''
@@ -285,12 +302,12 @@ class DeviceWidget(Gtk.Box):
         self.hold_widget.connect('hold', self._on_hold_change)
         self.popover.confirm_button.connect('clicked', self._on_settings_save)
         self.popover.remove_button.connect('clicked', self._on_device_remove)
-        self.eq_button.connect('clicked', self._on_eq_pressed)
+        self.effects_button.connect('clicked', self._on_effects_pressed)
 
         gesture = Gtk.GestureClick.new()
         gesture.set_button(3)
-        gesture.connect('pressed', self._on_eq_right_click)
-        self.eq_button.add_controller(gesture)
+        gesture.connect('pressed', self._on_effects_right_click)
+        self.effects_button.add_controller(gesture)
 
         gesture = Gtk.GestureClick.new()
         gesture.connect('released', lambda *_: self.emit('spectrum_pressed'))
@@ -344,11 +361,11 @@ class DeviceWidget(Gtk.Box):
     def _on_hold_change(self, _, state):
         self.emit('hold_primary', state)
 
-    def _on_eq_pressed(self, _):
-        self.emit('eq_pressed')
+    def _on_effects_pressed(self, _):
+        self.emit('effects_pressed')
 
-    def _on_eq_right_click(self, *_):
-        self.emit('eq_toggled')
+    def _on_effects_right_click(self, *_):
+        self.emit('effects_toggled')
 
     def _on_connection_settings_changed(self, popover, schema, output_type, output_id):
         connection_widget = self.connections_widgets[output_type].widgets[output_id]

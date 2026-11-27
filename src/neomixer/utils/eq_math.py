@@ -52,6 +52,23 @@ def band_coefficients(filter_type: str, freq: float, gain: float, q: float, rate
     raise ValueError(f'Unknown filter type: {filter_type}')
 
 
+def response(coefficients, freq: float, rate: float = RATE) -> complex:
+    '''Complex response of a biquad at a frequency.'''
+    b0, b1, b2, a0, a1, a2 = coefficients
+    z = cmath.exp(-2j * math.pi * freq / rate)
+    return (b0 + b1 * z + b2 * z * z) / (a0 + a1 * z + a2 * z * z)
+
+
+def deesser_db(gain_db: float, freq: float, at: float, rate: float = RATE) -> float:
+    '''
+    What the de-esser does at a frequency while it turns the highs down by gain_db: it plays
+    gain * x + (1 - gain) * lowpass(x), see scripts.pw_eq. "freq" is where it splits.
+    '''
+    gain = 10 ** (gain_db / 20)
+    value = abs(gain + (1 - gain) * response(band_coefficients('lowpass', freq, 0.0, 0.707, rate), at, rate))
+    return max(20 * math.log10(value), -120.0) if value > 0 else -120.0
+
+
 def magnitude_db(coefficients, freq: float, rate: float = RATE) -> float:
     '''Gain in dB of a biquad at a frequency.'''
     b0, b1, b2, a0, a1, a2 = coefficients

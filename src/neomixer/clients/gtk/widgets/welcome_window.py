@@ -40,16 +40,17 @@ GUIDE_SECTIONS = [
           'not running, or add one with the + button before it ever played anything.')
     ),
     (
-        _('Equalizer'),
-        _('The EQ button on any strip opens its parametric equalizer. Drag a band on the curve '
-          'to change its frequency and gain, scroll to change its width. Switching it off passes '
-          'the audio through unchanged, so you can compare. Right clicking the EQ button does '
-          'that without opening the window.')
+        _('Effects'),
+        _('The FX button on any strip opens its effects: a parametric equalizer, loudness '
+          'normalization for films, a compressor, a de-esser, a limiter and a noise gate. On the '
+          'EQ curve, drag a band to change its frequency and gain, scroll to change its width. '
+          'Switching an effect off passes the audio through unchanged, so you can compare. Right '
+          'clicking the FX button switches all of them off or on without opening the window.')
     ),
     (
         _('Running in the background'),
         _('New streams only go to their remembered output while NeoMixer runs, so closing the '
-          'window keeps it running with an icon in the tray. Routes and the EQ also keep working '
+          'window keeps it running with an icon in the tray. Routes and effects also keep working '
           'after you quit, until you log out. Turn on "Start at login" to have all of it from '
           'the start.')
     ),

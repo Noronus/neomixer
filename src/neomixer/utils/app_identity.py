@@ -71,7 +71,7 @@ def is_app_stream(props: dict, media_name: str = '') -> bool:
     if props.get('application.id') in ('org.PulseAudio.pavucontrol', 'org.kde.plasma-pa'):
         return False
     node_name = props.get('node.name', '')
-    if 'nm_route_' in node_name or 'pm_route_' in node_name or 'nm_eq_' in node_name:
+    if any(name in node_name for name in ('nm_route_', 'pm_route_', 'nm_eq_', 'nm_fxmeter_')):
         return False
     if media_name == 'audio-volume-change' or props.get('media.name') == 'audio-volume-change':
         return False

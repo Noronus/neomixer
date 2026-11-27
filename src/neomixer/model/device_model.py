@@ -7,6 +7,7 @@ from neomixer.scripts import pmctl
 from neomixer.schemas import pulse_mappings
 from neomixer.model.connection_model import ConnectionModel, port_position
 from neomixer.model.eq_model import EqModel
+from neomixer.model.effects_model import EffectsModel
 
 LOG = logging.getLogger("generic")
 
@@ -31,6 +32,7 @@ class DeviceModel(BaseModel):
     connections: dict[str, dict[str, ConnectionModel]] = {'a': {}, 'b': {}}
     selected_channels: list[bool] | None
     eq: EqModel = Field(default_factory=EqModel)
+    effects: EffectsModel = Field(default_factory=EffectsModel)
     hotkeys: dict[str, str] = Field(default_factory=dict)  # action: keys, see utils.hotkeys
     hotkey_osd: bool = False  # show the volume on screen when a hotkey changes it, see clients.gtk.osd
 

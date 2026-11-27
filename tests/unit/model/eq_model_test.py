@@ -110,12 +110,13 @@ def test_params_of_a_disabled_eq_pass_everything_through():
     eq = EqModel(enabled=False, preamp=-6, bands=[
         EqBand(type='peak', gain=9), EqBand(type='lowpass', freq=200), EqBand(type='highpass', freq=200), EqBand(type='notch', freq=200),
     ])
-    params = dict(pw_eq.band_params(eq))
-    assert params['b1:Gain'] == 0
-    assert params['b2:Freq'] > 48000
-    assert params['b3:Freq'] == 0
-    assert params['b4:Freq'] == 0
-    assert params['pre:Gain'] == 0
+    params = dict(pw_eq.graph_params(eq, None, 2))
+    for channel in (1, 2):
+        assert params[f'b1_{channel}:Gain'] == 0
+        assert params[f'b2_{channel}:Freq'] > 48000
+        assert params[f'b3_{channel}:Freq'] == 0
+        assert params[f'b4_{channel}:Freq'] == 0
+        assert params[f'pre_{channel}:Gain'] == 0
 
 
 def test_config_names_a_device_whatever_its_name_contains():
@@ -126,3 +127,10 @@ def test_config_names_a_device_whatever_its_name_contains():
     assert 'audio.channels = 1' in config
     for label in ('bq_lowshelf', 'bq_peaking', 'bq_highshelf'):
         assert label in config
+
+
+def test_deesser_shelf_leaves_the_lows_and_cuts_the_highs():
+    from neomixer.utils.eq_math import deesser_db
+    assert deesser_db(-12, 4500, 200) == pytest.approx(0, abs=0.05)
+    assert deesser_db(-12, 4500, 16000) == pytest.approx(-12, abs=1.0)
+    assert deesser_db(0, 4500, 8000) == pytest.approx(0, abs=1e-6)

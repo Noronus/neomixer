@@ -57,14 +57,14 @@ def demo_screenshot(d):
     select_device(d.card('discord'), 'indiscord')
     strip(d, 'vi', 'in media').device_model.eq.apply_preset('Loudness')
     strip(d, 'vi', 'in media').device_model.eq.enabled = True
-    d.ui._on_eq_window_changed(None, 'vi', '2')
+    d.ui._on_effects_changed(None, 'vi', '2')
     strip(d, 'vi', 'in1').volume_widget.set_value(85)
     strip(d, 'vi', 'in discord').volume_widget.set_value(92)
     yield 2.0
     d.shot('neomixer')
-    d.ui.open_eq_window(None, 'vi', '2')
+    d.ui.open_effects_window(None, 'vi', '2')
     yield 0.6
-    d.shot('neomixer-eq', d.ui.eq_windows[('vi', '2')])
+    d.shot('neomixer-eq', d.ui.effects_windows[('vi', '2')])
     d.stop_players()
 
 
@@ -349,13 +349,13 @@ def set_everything_then_get_killed(d):
     yield 0.3
 
     # The EQ on, with an audible curve
-    media.emit('eq_pressed')
+    media.emit('effects_pressed')
     yield 0.8
-    window = d.ui.eq_windows[('vi', '2')]
+    window = d.ui.effects_windows[('vi', '2')].eq_panel
     window.eq.apply_preset('Bass Boost')
     window.enable_switch.set_active(True)
     yield 1.0
-    d.shot('eq_window', window)
+    d.shot('eq_window', window.get_root())
     d.shot('eq_on_strip')
     yield 3.0  # past the autosave
     os.kill(os.getpid(), signal.SIGKILL)
@@ -375,7 +375,7 @@ def all_restored_after_reboot(d):
     in1 = pmctl.get_device_by_name('sink', 'in1')
     d.check(bool(in1.mute), 'and mute')
     d.check(media.device_model.eq.enabled and media.device_model.eq.preset == 'Bass Boost', 'EQ settings are back')
-    d.check('eq-on' in media.eq_button.get_css_classes(), 'EQ button shows it is on')
+    d.check('eq-on' in media.effects_button.get_css_classes(), 'EQ button shows it is on')
     d.check(media.connections_widgets['a'].widgets['2'].toggle_button.get_active() is False, 'route switched off stays off')
 
     linked = links()
@@ -400,6 +400,102 @@ def all_restored_after_reboot(d):
     yield 0.3
 
 
+def effects_change_the_sound(d):
+    '''The effects window through the whole app: a tone into the input, measured at the hardware output.'''
+    from tests.integration.audio_probe import measure_db
+    from neomixer.scripts import pw_eq
+    output = HEADSET
+    media = strip(d, 'vi', 'in media')
+    media.volume_widget.set_value(100)
+    media.emit('effects_pressed')
+    yield 0.5
+    window = d.ui.effects_windows[('vi', '2')]
+    window.switches['eq'].set_active(False)
+    yield 0.3
+
+    # The tone peaks at -20 dB: a ceiling of -24 dB has to take 4 dB off
+    window.switches['limiter'].set_active(True)
+    window.scales[('limiter', 'ceiling')].set_value(-24)
+    yield 1.0
+    d.check('eq-on' in media.effects_button.get_css_classes(), 'FX button shows an effect is on')
+    pids = pw_eq.running_pids('inmedia')
+    d.check(bool(pids), 'an effect alone runs the filter chain')
+    limited = measure_db('inmedia', output, 1000)
+    d.check(limited is not None and abs(limited + 4) < 1.0, f'limiter at -24 dB gives {limited}')
+    d.shot('effects_limiter', window)
+
+    # Bypass with a right click, instantly and without a restart
+    media.emit('effects_toggled')
+    yield 0.3
+    bypassed = measure_db('inmedia', output, 1000)
+    d.check(bypassed is not None and abs(bypassed) < 0.5, f'bypass passes through: {bypassed}')
+    d.check('eq-on' not in media.effects_button.get_css_classes(), 'FX button shows they are off')
+    d.check(window.master_switch.get_active() is False, 'window shows they are off')
+    d.check(pw_eq.running_pids('inmedia') == pids, 'same process')
+    media.emit('effects_toggled')
+    window.switches['limiter'].set_active(False)
+
+    # Compressor: -23 dB of power, 17 dB over a threshold of -40, at 4:1 takes 12.75 dB off
+    window.switches['compressor'].set_active(True)
+    window.scales[('compressor', 'threshold')].set_value(-40)
+    window.scales[('compressor', 'ratio')].set_value(4)
+    yield 0.5
+    compressed = measure_db('inmedia', output, 1000)
+    d.check(compressed is not None and abs(compressed + 12.75) < 1.0, f'compressor gives {compressed}')
+    window.show_page('compressor')
+    yield 0.3
+    d.shot('effects_compressor', window)
+
+    # While it plays, the spectrum window shows what each effect does, measured by the meter
+    import os
+    import subprocess
+    from neomixer import settings
+    from tests.integration.audio_probe import UNTOUCHED, _write_sine
+    tone = os.path.join(settings.XDG_RUNTIME_DIR, 'effects-live.wav')
+    _write_sine(tone, 1000, 5)
+    player = subprocess.Popen(['pw-play', *UNTOUCHED, '--target', 'inmedia', tone], stderr=subprocess.DEVNULL)
+    d.ui.open_spectrum_window(None, 'vi', '2')
+    spectrum = d.ui.spectrum_windows[('vi', '2')]
+    yield 2.5
+    live = dict(spectrum.live)
+    d.check(abs(live.get('compressor', 0) + 12.75) < 1.0, f'spectrum window shows the compressor at work: {live}')
+    d.check(abs(live.get('limiter', 99)) < 0.2, f'and the limiter idle: {live}')
+    d.check(spectrum.effects_view.get_visible(), 'its effects panel shows')
+    d.check(spectrum.view.caption == 'Before the effects', f'an input is recorded before them: {spectrum.view.caption}')
+    lines = spectrum.effects_view.lines()
+    d.check([line[0] for line in lines] == ['Compressor'] and lines[0][2] < -10, f'with the compressor line: {lines}')
+    d.shot('effects_live', spectrum)
+    player.terminate()
+    player.wait()
+    yield 1.2
+    d.check(spectrum.live.get('compressor', -99) > -1, f'silence does not need turning down: {spectrum.live}')
+    spectrum.close()
+    yield 0.5
+    from neomixer.scripts import pw_fxmeter
+    d.check(not os.path.exists(pw_fxmeter.config_path('inmedia')), 'closing the spectrum ends its meter')
+    meters = subprocess.run(['pgrep', '-af', pw_fxmeter.config_path('inmedia')], capture_output=True, text=True).stdout.splitlines()
+    meters += subprocess.run(['pgrep', '-af', pw_fxmeter.recorder_name('inmedia')], capture_output=True, text=True).stdout.splitlines()
+    d.check(not meters, f'no meter process is left: {meters}')
+    window.switches['compressor'].set_active(False)
+
+    if pw_eq.has_loudness_meter():
+        # Far below a target of -10 LUFS: it turns up by no more than it may
+        window.switches['normalize'].set_active(True)
+        window.scales[('normalize', 'target')].set_value(-10)
+        window.scales[('normalize', 'max_boost')].set_value(6)
+        yield 0.5
+        normalized = measure_db('inmedia', output, 1000)
+        d.check(normalized is not None and abs(normalized - 6) < 1.0, f'normalization gives {normalized}')
+        window.switches['normalize'].set_active(False)
+
+    d.check(pw_eq.running_pids('inmedia') == pids, 'switching effects never restarted it')
+    yield 0.3
+    flat = measure_db('inmedia', output, 1000)
+    d.check(flat is not None and abs(flat) < 0.5, f'all off passes through: {flat}')
+    media.volume_widget.set_value(70)
+    yield 0.3
+
+
 def eq_changes_the_sound(d):
     '''Through the whole app: a tone into the input, measured at the hardware output.'''
     from tests.integration.audio_probe import measure_db
@@ -407,9 +503,9 @@ def eq_changes_the_sound(d):
     media = strip(d, 'vi', 'in media')
     device = media.device_model
     media.volume_widget.set_value(100)
-    d.ui.open_eq_window(None, 'vi', '2')
+    d.ui.open_effects_window(None, 'vi', '2')
     yield 0.5
-    window = d.ui.eq_windows[('vi', '2')]
+    window = d.ui.effects_windows[('vi', '2')].eq_panel
     window.eq.reset()
     window.eq.enabled = True
     window._edited()
@@ -425,7 +521,7 @@ def eq_changes_the_sound(d):
     yield 0.3
     boosted = measure_db('inmedia', output, 1000)
     d.check(boosted is not None and abs(boosted - 9) < 0.7, f'+9 dB band gives {boosted}')
-    d.shot('eq_boosted', window)
+    d.shot('eq_boosted', window.get_root())
 
     # dragging on the curve goes through the same path
     curve = window.curve
@@ -441,14 +537,14 @@ def eq_changes_the_sound(d):
     # comparing: instant, no process restart
     from neomixer.scripts import pw_eq
     pids = pw_eq.running_pids('inmedia')
-    media.emit('eq_toggled')
+    media.emit('effects_toggled')
     yield 0.3
     bypassed = measure_db('inmedia', output, 1000)
     d.check(bypassed is not None and abs(bypassed) < 0.5, f'EQ off passes through: {bypassed}')
-    d.check('eq-on' not in media.eq_button.get_css_classes(), 'button shows it is off')
-    d.check(window.enable_switch.get_active() is False, 'window shows it is off')
+    d.check('eq-on' not in media.effects_button.get_css_classes(), 'button shows it is off')
+    d.check(window.get_root().master_switch.get_active() is False, 'window shows it is off')
     d.check(pw_eq.running_pids('inmedia') == pids, 'same process')
-    media.emit('eq_toggled')
+    media.emit('effects_toggled')
     yield 0.3
 
     # a filter type change has to rebuild it, the audio has to come back
@@ -467,14 +563,14 @@ def eq_changes_the_sound(d):
     mic = strip(d, 'hi', 'mic')
     mic.device_model.eq.enabled = True
     mic.device_model.eq.bands[3].gain = 6
-    d.ui._on_eq_window_changed(None, 'hi', '1')
+    d.ui._on_effects_changed(None, 'hi', '1')
     yield 1.0
     linked = __import__('tests.integration.ui_driver', fromlist=['links']).links()
     d.check('input.nm_eq_alsa_input.test_headset.mono-fallback:input_MONO' in linked, 'mono input EQ is fed')
     d.check('output.nm_eq_alsa_input.test_headset.mono-fallback:output_MONO\n  |-> mic1:input_MONO' in linked,
             'and plays into its route')
     mic.device_model.eq.enabled = False
-    d.ui._on_eq_window_changed(None, 'hi', '1')
+    d.ui._on_effects_changed(None, 'hi', '1')
     window.eq.enabled = False
     window._edited()
     yield 0.3
@@ -561,7 +657,7 @@ def server_restart(d):
 
     media = strip(d, 'vi', 'in media')
     media.device_model.eq.enabled = True
-    d.ui._on_eq_window_changed(None, 'vi', '2')
+    d.ui._on_effects_changed(None, 'vi', '2')
     yield 1.0
 
     script = os.path.join(os.path.dirname(__file__), 'sandbox.sh')
@@ -585,7 +681,7 @@ def server_restart(d):
     d.check(stream_device('Firefox') == 'inmedia', f'program routing works again: {stream_device("Firefox")}')
     d.stop_players()
     media.device_model.eq.enabled = False
-    d.ui._on_eq_window_changed(None, 'vi', '2')
+    d.ui._on_effects_changed(None, 'vi', '2')
     yield 0.3
 
 
@@ -669,10 +765,15 @@ def readable_on_any_theme(d):
     d.shot('theme_settings', popover)
     popover.popdown()
 
-    d.ui.open_eq_window(None, 'vi', '1')
+    d.ui.open_effects_window(None, 'vi', '1')
     yield 0.5
-    window = d.ui.eq_windows[('vi', '1')]
-    d.check(not _unreadable(window), f'in the EQ too: {_unreadable(window)[:6]}')
+    window = d.ui.effects_windows[('vi', '1')]
+    d.check(not _unreadable(window), f'in the effects window too: {_unreadable(window)[:6]}')
+    window.show_page('compressor')
+    yield 0.3
+    d.check(not _unreadable(window), f'on its other pages too: {_unreadable(window)[:6]}')
+    window.show_page('eq')
+    yield 0.3
     d.shot('theme_eq', window)
     window.close()
 
@@ -936,10 +1037,10 @@ def text_size_setting(d):
     d.shot('text_big_route', route.popover)
     route.popover.popdown()
 
-    d.ui.open_eq_window(None, 'vi', '2')
+    d.ui.open_effects_window(None, 'vi', '2')
     yield 0.5
-    eq = d.ui.eq_windows[('vi', '2')]
-    d.check(abs(eq.curve.text_factor - d.content.text_factor) < 0.01, 'curve labels grow')
+    eq = d.ui.effects_windows[('vi', '2')]
+    d.check(abs(eq.eq_panel.curve.text_factor - d.content.text_factor) < 0.01, 'curve labels grow')
     too_small = [label.get_label() for label in _labels(eq) if _font_px(label) < big * 0.6]
     d.check(not too_small, f'nothing in the EQ window kept the old size: {too_small[:5]}')
     d.shot('text_big_eq', eq)
@@ -1061,8 +1162,8 @@ def _measure_at_device(device, play_args, freq=1000, seconds=0.9):
 
 
 def _set_band(d, device_type, device_id, gain):
-    d.ui.open_eq_window(None, device_type, device_id)
-    window = d.ui.eq_windows[(device_type, device_id)]
+    d.ui.open_effects_window(None, device_type, device_id)
+    window = d.ui.effects_windows[(device_type, device_id)].eq_panel
     window.eq.reset()
     window.eq.enabled = True
     window.selected = 3
@@ -1081,8 +1182,8 @@ def output_eq(d):
     media = strip(d, 'vi', 'in media')
     media.volume_widget.set_value(100)
     headset = strip(d, 'a', 'headset')
-    d.check(headset.eq_button.get_parent() is not None, 'hardware outputs have an EQ button')
-    d.check(strip(d, 'b', 'mic1').eq_button.get_parent() is not None, 'virtual outputs too')
+    d.check(headset.effects_button.get_parent() is not None, 'hardware outputs have an EQ button')
+    d.check(strip(d, 'b', 'mic1').effects_button.get_parent() is not None, 'virtual outputs too')
     yield 0.2
 
     before = _measure_at_device(HEADSET, ['--target', 'inmedia'])
@@ -1164,7 +1265,7 @@ def output_eq(d):
 
     # switched off for the next runs
     for key in (('a', '1'), ('b', '1')):
-        eq_window = d.ui.eq_windows[key]
+        eq_window = d.ui.effects_windows[key].eq_panel
         eq_window.eq.reset()
         eq_window.eq.enabled = False
         eq_window._edited()
@@ -1359,14 +1460,14 @@ def device_management(d):
     # EQ on it, then remove it: the EQ has to go too
     from neomixer.scripts import pw_eq
     new.device_model.eq.enabled = True
-    d.ui.open_eq_window(None, 'vi', list(d.content.device_box['vi'].widgets)[-1])
+    d.ui.open_effects_window(None, 'vi', list(d.content.device_box['vi'].widgets)[-1])
     device_id = next(key for key, w in d.content.device_box['vi'].widgets.items() if w is new)
-    d.ui._on_eq_window_changed(None, 'vi', device_id)
+    d.ui._on_effects_changed(None, 'vi', device_id)
     yield 0.8
     d.check(bool(pw_eq.running_pids('newinput')), 'EQ runs on the new device')
 
     # rename: new sink, EQ and routes follow
-    schema = new.device_model.model_dump(exclude={'connections', 'eq', 'init_failed', 'init_error', 'present'})
+    schema = new.device_model.model_dump(exclude={'connections', 'eq', 'effects', 'init_failed', 'init_error', 'present'})
     schema.update(name='renamed', nick='renamed', description='renamed')
     new.emit('device_change', schema)
     yield 1.0
@@ -1636,7 +1737,7 @@ def live_check(d):
         return
 
     device.eq.enabled = True
-    d.ui._on_eq_window_changed(None, 'a', device_id)
+    d.ui._on_effects_changed(None, 'a', device_id)
     yield 1.5
     capture, playback = pw_eq.eq_nodes(device.name)
     d.check(bool(pw_eq.running_pids(device.name)), 'EQ process runs')
@@ -1657,7 +1758,7 @@ def live_check(d):
     print(subprocess.check_output(['pw-top', '-b', '-n', '2'], text=True)[-900:])
 
     device.eq.enabled = False
-    d.ui._on_eq_window_changed(None, 'a', device_id)
+    d.ui._on_effects_changed(None, 'a', device_id)
     yield 0.3
 
 
@@ -1684,7 +1785,7 @@ def output_eq_and_text_after_reboot(d):
     d.check(d.content.settings_box.text_size.get_value() == 11.5, 'settings show it')
     d.check(headset.device_model.eq.enabled and headset.device_model.eq.bands[3].gain == 9, 'hardware output EQ settings survived')
     d.check(bus.device_model.eq.enabled and bus.device_model.eq.bands[3].gain == 6, 'virtual output EQ settings survived')
-    d.check('eq-on' in headset.eq_button.get_css_classes(), 'buttons show it')
+    d.check('eq-on' in headset.effects_button.get_css_classes(), 'buttons show it')
     d.check(bool(pw_eq.running_pids(HEADSET)) and bool(pw_eq.running_pids('mic1')), 'both are running')
 
     linked = links()
@@ -1700,8 +1801,8 @@ def output_eq_and_text_after_reboot(d):
 
     # back to neutral for what runs next
     for key in (('a', '1'), ('b', '1')):
-        d.ui.open_eq_window(None, *key)
-        window = d.ui.eq_windows[key]
+        d.ui.open_effects_window(None, *key)
+        window = d.ui.effects_windows[key].eq_panel
         window.eq.reset()
         window.eq.enabled = False
         window._edited()
@@ -1722,7 +1823,7 @@ def eq_starts_when_its_output_arrives(d):
     strip_widget.device_model.eq.enabled = True
     strip_widget.device_model.eq.bands[3].freq = 1000
     strip_widget.device_model.eq.bands[3].gain = 9
-    d.ui._on_eq_window_changed(None, 'a', '4')
+    d.ui._on_effects_changed(None, 'a', '4')
     yield 0.5
     d.check(not pw_eq.running_pids(blue), 'no EQ without its device')
 
@@ -1736,7 +1837,7 @@ def eq_starts_when_its_output_arrives(d):
 
     strip_widget.device_model.eq.reset()
     strip_widget.device_model.eq.enabled = False
-    d.ui._on_eq_window_changed(None, 'a', '4')
+    d.ui._on_effects_changed(None, 'a', '4')
     yield 0.3
 
 

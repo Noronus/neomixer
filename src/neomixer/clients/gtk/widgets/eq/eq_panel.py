@@ -32,10 +32,10 @@ def _spin(low, high, step, digits, width=7):
     return spin
 
 
-class EqWindow(Gtk.Window):
+class EqPanel(Gtk.Box):
     '''
-    Equalizer of one input device. It stays open next to the mixer, and every change applies
-    right away through the "changed" signal.
+    Equalizer of one device, a page of its effects window. Every change applies right away
+    through the "changed" signal.
     '''
 
     __gsignals__ = {
@@ -43,8 +43,7 @@ class EqWindow(Gtk.Window):
     }
 
     def __init__(self, device_model, **kwargs):
-        super().__init__(title=_('EQ: %s') % device_model.nick, default_width=860, default_height=560, **kwargs)
-        self.add_css_class('neomixer-eq')
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, **kwargs)
         self.device_model = device_model
         self.eq = device_model.eq
         self.selected = 0
@@ -54,12 +53,10 @@ class EqWindow(Gtk.Window):
         self.curve.connect('band_selected', self._on_curve_selected)
         self.curve.connect('changed', self._on_curve_changed)
 
-        main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        main.append(self._build_toolbar())
-        main.append(self.curve)
-        main.append(self._build_band_chips())
-        main.append(self._build_band_details())
-        self.set_child(main)
+        self.append(self._build_toolbar())
+        self.append(self.curve)
+        self.append(self._build_band_chips())
+        self.append(self._build_band_details())
 
         self.refresh()
 

@@ -90,6 +90,7 @@ SCENARIOS = (
     ('REBOOT', None),
     ('all_restored_after_reboot', 0),
     ('eq_changes_the_sound', 0),
+    ('effects_change_the_sound', 0),
     ('hotplug', 0),
     ('change_then_sigterm', 0),
     ('saved_by_sigterm', 0),
